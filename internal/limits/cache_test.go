@@ -3,6 +3,7 @@ package limits
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -124,5 +125,22 @@ func TestCachePathHonoursXDG(t *testing.T) {
 	}
 	if filepath.IsAbs(got) == false {
 		t.Errorf("CachePath() = %q, want an absolute path", got)
+	}
+}
+
+// TestReadCacheSmallPercentage is the regression that matters most here,
+// because it is what a fresh session actually looks like: the cache holds 1.0
+// for one percent, and reading that as a fraction put the display at full red
+// after a hundredth of the allowance.
+func TestReadCacheSmallPercentage(t *testing.T) {
+	now := time.Now()
+	body := fmt.Sprintf(`{"timestamp": %d, "usage": {"five_hour": {"utilization": 1.0}}}`, now.Unix())
+
+	got, err := ReadCache(writeCache(t, body), time.Hour, now)
+	if err != nil {
+		t.Fatalf("ReadCache: %v", err)
+	}
+	if math.Abs(got.SessionUtilization-0.01) > 1e-9 {
+		t.Errorf("utilization = %v, want 0.01 (one percent, not everything)", got.SessionUtilization)
 	}
 }
