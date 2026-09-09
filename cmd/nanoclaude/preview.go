@@ -91,18 +91,11 @@ func newPreviewCmd() *cobra.Command {
 }
 
 func parsePhase(name string) (render.Phase, error) {
-	switch name {
-	case "idle":
-		return render.PhaseIdle, nil
-	case "thinking":
-		return render.PhaseThinking, nil
-	case "tool":
-		return render.PhaseTool, nil
-	case "error":
-		return render.PhaseError, nil
-	default:
-		return 0, fmt.Errorf("preview: unknown phase %q (idle, thinking, tool, error)", name)
+	ph, err := render.ParsePhase(name)
+	if err != nil {
+		return 0, fmt.Errorf("preview: %w", err)
 	}
+	return ph, nil
 }
 
 // previewGeometry uses the real device layout when one is configured, and a

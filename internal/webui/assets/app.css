@@ -1,0 +1,169 @@
+/* The palette is the one the terminal commands use, so the tool looks like
+   one tool whichever half of it you are looking at. */
+:root {
+  /* Committed dark, so the native select popup and the scrollbars match the
+     page instead of flashing white against it. */
+  color-scheme: dark;
+
+  --bg: #0b0d11;
+  --panel: #14181f;
+  --line: #232936;
+  --text: #e6e9ef;
+  --muted: #8b95a7;
+  --accent: #7cc5ff;
+  --good: #00d68f;
+  --warn: #ffb020;
+  --bad: #ff5c5c;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 2rem 1.5rem 3rem;
+  background: radial-gradient(1200px 700px at 50% -10%, #151b26 0%, var(--bg) 60%);
+  color: var(--text);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.head { max-width: 62rem; margin: 0 auto 1.75rem; }
+h1 { margin: 0 0 .5rem; font-size: 1.5rem; letter-spacing: -.01em; }
+.head p { margin: 0; max-width: 46rem; color: var(--muted); }
+.green { color: var(--good); }
+.red { color: var(--bad); }
+
+.head p.warn {
+  margin-top: .9rem;
+  padding: .7rem .9rem;
+  border: 1px solid color-mix(in oklab, var(--warn) 45%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in oklab, var(--warn) 8%, transparent);
+  color: var(--text);
+}
+
+main {
+  max-width: 62rem;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(15rem, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 52rem) { main { grid-template-columns: 1fr; } }
+
+.stage, .card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+.stage { display: grid; gap: 1rem; }
+aside { display: grid; gap: 1.5rem; }
+
+.dial {
+  position: relative;
+  border-radius: var(--radius);
+  background:
+    linear-gradient(0deg, #0c0f14 0%, #0e131a 100%),
+    repeating-linear-gradient(0deg, transparent 0 39px, #ffffff08 39px 40px);
+  border: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+  outline-offset: 3px;
+}
+.dial:active { cursor: grabbing; }
+.dial:focus-visible { outline: 2px solid var(--accent); }
+
+#shape { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+#glow { filter: blur(14px); opacity: .55; }
+#panels polygon { stroke: #ffffff1f; stroke-width: 2; }
+/* Outlined rather than solid: the number sits on whatever colour the panel is
+   showing, and the calibration picture's middle band is nearly black. */
+#labels text {
+  fill: #f4f7ff;
+  stroke: #00000099;
+  stroke-width: 5;
+  paint-order: stroke;
+  font: 600 22px ui-monospace, monospace;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+/* The floor line is the whole point of the drawing: it says which edge of the
+   picture is the edge of the room. */
+.ground {
+  position: absolute;
+  inset: auto 1rem 1rem;
+  border-top: 1px dashed #ffffff2e;
+  text-align: center;
+  pointer-events: none;
+}
+.ground span {
+  display: inline-block;
+  transform: translateY(-50%);
+  padding: 0 .5rem;
+  background: #0d1117;
+  color: var(--muted);
+  font-size: .75rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.turn { display: flex; align-items: center; justify-content: center; gap: .5rem; }
+#angle {
+  min-width: 5.5rem;
+  text-align: center;
+  /* Not a monospace stack: the degree sign falls back to another font in
+     several of them, and lands half a line high. */
+  font: 600 1.6rem/1 ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: #1b212b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .45rem .8rem;
+  cursor: pointer;
+}
+button:hover { border-color: #33405a; background: #202836; }
+button.primary {
+  background: color-mix(in oklab, var(--good) 22%, #1b212b);
+  border-color: color-mix(in oklab, var(--good) 55%, var(--line));
+  font-weight: 600;
+}
+button:disabled { opacity: .5; cursor: default; }
+
+input[type=range] { width: 100%; accent-color: var(--accent); }
+select {
+  font: inherit;
+  color: var(--text);
+  background: #1b212b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .3rem .5rem;
+}
+
+.row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; color: var(--muted); }
+.row label { display: inline-flex; gap: .4rem; align-items: center; }
+.field { display: grid; gap: .35rem; margin-bottom: .9rem; color: var(--muted); }
+.field-head { display: flex; gap: .4rem; align-items: baseline; }
+.field-head output { color: var(--text); font-variant-numeric: tabular-nums; }
+.hint { margin: .5rem 0 0; color: var(--muted); font-size: .875rem; }
+
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.status { margin: 0; color: var(--muted); font-size: .875rem; }
+.status.ok { color: var(--good); }
+.status.bad { color: var(--bad); }
+
+h2 { margin: 0 0 .8rem; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+dl { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; margin: 0; font-size: .9rem; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+code { font-family: ui-monospace, monospace; font-size: .9em; }

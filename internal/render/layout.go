@@ -19,31 +19,34 @@ import (
 // extraRotation is added to the layout's own global orientation, in degrees,
 // for installations where the two do not agree.
 func FromLayout(l nanoleaf.Layout, extraRotation int) (Geometry, []nanoleaf.Panel) {
-	lights := l.Lights()
+	return FromWall(Project(l, extraRotation))
+}
 
-	ids := make([]int, 0, len(lights))
-	xs := make([]float64, 0, len(lights))
-	ys := make([]float64, 0, len(lights))
-	var skipped []nanoleaf.Panel
+// FromWall is FromLayout for a layout already placed on the wall.
+//
+// It exists so a caller that needs both the scene coordinates and the
+// mounted shape -- the calibration page needs the outlines as well as the
+// bands -- projects the layout once instead of twice.
+func FromWall(wall Wall) (Geometry, []nanoleaf.Panel) {
+	usable, unaddressable := wall.Lights()
 
-	for _, p := range lights {
-		if !p.Addressable() {
-			skipped = append(skipped, p)
-			continue
-		}
-		ids = append(ids, p.ID)
-		xs = append(xs, float64(p.X))
-		ys = append(ys, float64(p.Y))
+	ids := make([]int, len(usable))
+	xs := make([]float64, len(usable))
+	ys := make([]float64, len(usable))
+	for i, wp := range usable {
+		ids[i] = wp.Panel.ID
+		xs[i], ys[i] = wp.X, wp.Y
 	}
 
-	// The global orientation is SUBTRACTED, not added. It describes how the
-	// arrangement is rotated in the device's own frame, so undoing it is
-	// what brings the coordinates back to the wall. Getting the sign wrong
-	// is not a small error: verified against a real NL42 mounted at
-	// globalOrientation 302, adding it put the vertical axis 116 degrees
-	// out -- the fill climbed diagonally, which on a wall reads as a design
-	// choice rather than a bug.
-	rotate(xs, ys, float64(extraRotation-l.GlobalOrientation))
+	skipped := make([]nanoleaf.Panel, 0, len(unaddressable))
+	for _, wp := range unaddressable {
+		skipped = append(skipped, wp.Panel)
+	}
+	if len(skipped) == 0 {
+		// Nil rather than an empty slice, so a caller may compare
+		// against nil as well as check the length.
+		skipped = nil
+	}
 	return NewGeometry(ids, xs, ys), skipped
 }
 

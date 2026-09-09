@@ -233,10 +233,11 @@ func offerCalibrate(ctx context.Context, cmd *cobra.Command, host, token string)
 	if err := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().
 			Title("Line the shape up with your wall?").
-			Description("Lights the bottom of the shape green and the top red, and lets you\n" +
-				"turn it with the arrow keys until it matches. The panels report\n" +
-				"where they are, but nothing tells them which way is up in your\n" +
-				"room, so this is the only way to be sure.").
+			Description("Opens a page on this machine that draws your panels, lights the\n" +
+				"bottom of the shape green and the top red, and lets you drag it\n" +
+				"until it matches. The panels report where they are, but nothing\n" +
+				"tells them which way is up in your room, so this is the only way\n" +
+				"to be sure.").
 			Value(&run),
 	)).RunWithContext(ctx); err != nil {
 		return err
@@ -245,9 +246,10 @@ func offerCalibrate(ctx context.Context, cmd *cobra.Command, host, token string)
 		return nil
 	}
 
-	// The dial, not a static pattern: nobody can look at a wall and name
-	// an angle, so the shape is turned with the arrow keys instead.
-	return turnShape(cmd, nanoleaf.New(host, token), 0)
+	// The page, not a static pattern: nobody can look at a wall and name
+	// an angle, and a terminal can only draw the shape as coloured
+	// blocks. The browser draws the panels themselves.
+	return calibrateInBrowser(cmd, nanoleaf.New(host, token), 0, 0, true)
 }
 
 // offerHooks installs the hooks, which is what makes the display start on its

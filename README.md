@@ -36,7 +36,7 @@ Every step is also a command of its own, so you can do any of them by hand:
 ```sh
 nanoclaude discover                  # find the panels
 nanoclaude pair --host 192.168.1.50  # get a token
-nanoclaude calibrate                 # check which way the shape is mounted
+nanoclaude calibrate                 # line the shape up with your wall
 nanoclaude hooks install             # let Claude Code start the display
 ```
 
@@ -48,15 +48,28 @@ To pair, hold the power button on the controller for 5 to 7 seconds, until the
 LEDs flash. The panels hold several tokens at once, so this does not revoke
 access for Home Assistant or for the Nanoleaf app.
 
-`calibrate` lights the bottom of the shape green and the top red, and lets you
-turn it with the arrow keys until it matches your wall. Press enter and it
-saves the rotation. The panels report where they are, and the device reports
-how the arrangement is rotated, but nothing tells it which way is up in your
-room.
+`calibrate` opens a page on this machine. The page draws your own panels at
+the angles they are mounted at, and lights the bottom of the shape green and
+the top red. Drag the shape until it matches the wall, then press Save.
+
+The panels report where they are, and the device reports how the whole
+arrangement is rotated. Nothing tells it which way is up in your room, so this
+is the only way to be sure.
 
 You never have to name an angle. That was the earlier advice and it was not
-something a person can do: working out the difference took a photograph and a
+something a person can do. Working out the difference took a photograph and a
 statistical fit of the panel positions.
+
+The page is served on the loopback interface only, and the address opens once.
+It has to be passed to your browser, where other programs on the machine can
+read it, so a second visit is refused and you run the command again. The
+session stops when you close the tab.
+
+Add `--tui` to do the same job in the terminal with the arrow keys. That draws
+the shape as coloured blocks instead of as your panels.
+
+The page can also paint the real display at any level you choose. Use it to
+look at the gauge without waiting to spend a real allowance.
 
 `hooks install` writes to `~/.claude/settings.json`. It keeps every hook that
 is already there and it writes a backup first. It also edits the file in
@@ -81,7 +94,7 @@ You can also control it by hand:
 | `nanoclaude run` | Run it in the foreground |
 | `nanoclaude discover` | Find Nanoleaf controllers on this network |
 | `nanoclaude pair` | Get an API token from panels in pairing mode |
-| `nanoclaude calibrate` | Turn the shape until it matches your wall |
+| `nanoclaude calibrate` | Open the page that turns the shape to match your wall |
 | `nanoclaude layout` | Print the panel positions and the scene coordinates |
 | `nanoclaude preview` | Draw a scene in the terminal, without touching the panels |
 | `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |

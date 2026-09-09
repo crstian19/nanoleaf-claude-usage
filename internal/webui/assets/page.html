@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nanoclaude · calibrate</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="head">
+  <h1>Turn the shape until it matches your wall</h1>
+  <p>Your panels are lit <strong class="green">green along the bottom</strong> of the shape and
+     <strong class="red">red along the top</strong>. Drag the shape below until it sits the way the
+     real one does, then save.</p>
+  <p class="warn" id="trouble" hidden></p>
+  <p class="warn" id="fighting" hidden>The display is running and is painting the same panels. Stop it
+     with <code>nanoclaude down</code> or the two will fight over the wall.</p>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="dial" id="dial" tabindex="0" role="slider" aria-label="Rotation of the shape"
+         aria-valuemin="0" aria-valuemax="359" aria-valuenow="0" aria-valuetext="0 degrees">
+      <svg id="shape" viewBox="-200 -200 400 400" aria-hidden="true">
+        <g id="glow"></g>
+        <g id="panels"></g>
+        <g id="labels"></g>
+      </svg>
+      <div class="ground"><span>floor</span></div>
+    </div>
+
+    <div class="turn">
+      <button type="button" class="step" data-turn="15" title="turn left 15 degrees">↺&nbsp;15°</button>
+      <button type="button" class="step" data-turn="1" title="turn left 1 degree">↺&nbsp;1°</button>
+      <output id="angle" aria-live="off">0°</output>
+      <button type="button" class="step" data-turn="-1" title="turn right 1 degree">1°&nbsp;↻</button>
+      <button type="button" class="step" data-turn="-15" title="turn right 15 degrees">15°&nbsp;↻</button>
+    </div>
+
+    <input type="range" id="slider" min="0" max="359" step="1" value="0" aria-label="rotation">
+
+    <div class="row">
+      <label><input type="checkbox" id="snap" checked> Snap to 15°</label>
+      <label><input type="checkbox" id="numbers"> Show fill order</label>
+      <span class="hint">Arrow keys turn it too.</span>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="save" class="primary">Save rotation</button>
+      <button type="button" id="done">Done</button>
+      <p class="status" id="status" role="status"></p>
+    </div>
+  </section>
+
+  <aside>
+    <section class="card">
+      <h2>Picture on the wall</h2>
+      <div class="row">
+        <label><input type="radio" name="mode" value="pattern" checked> Calibration</label>
+        <label><input type="radio" name="mode" value="gauge"> Real display</label>
+      </div>
+      <div id="gauge-controls" hidden>
+        <label class="field">
+          <span class="field-head">Used <output id="level-out">60%</output></span>
+          <input type="range" id="level" min="0" max="100" step="1" value="60">
+        </label>
+        <label class="field">
+          <span class="field-head">Claude is</span>
+          <select id="phase">
+            <option value="idle">idle</option>
+            <option value="thinking">thinking</option>
+            <option value="tool">running a tool</option>
+            <option value="error">stuck on an error</option>
+          </select>
+        </label>
+        <p class="hint">This paints the real display at a level you choose, so you can see the look
+           without spending an allowance to get there.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Device</h2>
+      <dl id="facts"></dl>
+      <p class="hint" id="unknown" hidden></p>
+    </section>
+  </aside>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

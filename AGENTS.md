@@ -28,5 +28,10 @@ Read `docs/architecture.md` before changing rendering or the wire protocol.
   brightness and summing light sources are physical ones. Do not unify them.
 - **Enabling extControl is the only destructive call.** Anything that can
   fail must fail before it, or the user's effect is lost for good.
+- **The calibration page computes nothing.** Every coordinate and colour it
+  draws comes from Go, from the same frame that went to the panels. A page
+  that could disagree with the wall is worse than no page, and two copies of
+  one projection is how the `globalOrientation` sign bug survived as long as
+  it did.
 - **Verify module versions with `go list -m -versions`**, not from memory. The
   Charm v2 modules live under `charm.land/`, but `fang` does not.

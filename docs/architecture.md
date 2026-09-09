@@ -367,6 +367,146 @@ between 65% and 100% of their own colour.
 That left the ramp itself as the last source of unevenness, and it was the
 biggest: see the constant-lightness ramp below.
 
+## Calibration happens in a browser
+
+Nothing tells the device which way is up in the room. `/panelLayout` gives
+relative positions and a `globalOrientation`, and neither of them knows where
+the floor is. Somebody has to look at the wall and say. That turned out to be
+the hardest interface in the project, and it took three attempts.
+
+**Attempt one: ask for the angle.** `NANOCLAUDE_ROTATION`, in degrees,
+documented. It is not something a person can produce: working out that this
+wall wanted 0 rather than 116 took a photograph, a PCA fit over the panel
+centroids and a check against a third point. Configuration that can only be
+filled in by the author is not configuration.
+
+**Attempt two: a dial in the terminal.** Arrow keys turn the shape, the panels
+follow, enter saves. Much better — nobody names an angle — but the shape on
+screen is coloured blocks on a character grid, so the thing being compared
+against the wall is already a translation of it. The verdict on it was one
+sentence long, and it was right.
+
+**Attempt three: a page on 127.0.0.1.** A browser can draw the actual
+triangles at their actual angles, and a mouse can turn them. That is the whole
+argument. `internal/webui` serves it and `nanoclaude calibrate` opens it.
+
+### The browser does no geometry
+
+Every polygon the page draws arrives from Go, in screen coordinates, together
+with the colours that went to the panels in the same frame. The page sets
+attributes; it does not compute positions. A calibration tool whose screen and
+wall could disagree would be worse than no tool at all, and two
+implementations of one projection is exactly the bug this project already paid
+for once — the sign of `globalOrientation` was wrong for a while, and a second
+copy of the transform would have hidden the fix.
+
+That is why `render.Project` exists. `FromLayout` is built on it, so the
+renderer and the drawing share one rotation rather than each applying their
+own.
+
+### The outlines were measured, not assumed
+
+A triangle's corners sit at `90° + o + 120k` from its centroid, at a
+circumradius of `side/√3`. The base angle came from a real NL42 rather than
+from a convention: on that device the panels reporting `o=0` point up and the
+ones reporting `o=180` point down, and their centroids are offset by half a
+side across and one inradius up, which is a triangular tiling of the reported
+side length and nothing else. `TestTrianglesShareTheirEdges` pins it the way a
+wall does: panels that touch in the room must share two corners in the
+drawing. A base angle 60° out makes neighbours share none, and the page then
+draws a pile of overlapping shapes.
+
+Hexagons have no device here to check against, so their corner angle is
+*inferred* rather than picked: hexagons meet edge to edge, so the direction
+from one to its nearest neighbour points at the middle of a shared edge, and a
+corner is 30° from that. Guessing between flat-top and pointy-top would be
+wrong half the time, and wrong by a twelfth of a turn looks like a fault
+rather than a choice.
+
+Mini triangles are the one guess left. A device reports a single side length
+and a mixed set has two, so a mini triangle is halved only when full triangles
+are present as well. In a mini-only set the reported length already is the
+mini one, and halving it would draw a tiling full of gaps.
+
+### The drawing must not breathe
+
+The frame the shape is drawn in is a square whose half-width never changes
+with the rotation. Measured from the shape's bounding box it would: an
+arrangement wider than tall fills more of a square at 90° than at 0°, so the
+drawing would zoom in and out as the mouse moved, which reads as the page
+being broken rather than as the shape turning. The bound is built only from
+distances to the centre of rotation, which no rotation can change.
+`TestExtentSurvivesRotation` holds it.
+
+### It is a control surface, not a viewer
+
+The page changes what a wall of lights is doing and writes to the user's
+configuration file, so reaching it has to mean something:
+
+- **Loopback only.** There is deliberately no flag to bind elsewhere.
+- **Two codes, not one.** The address printed in the terminal carries a
+  *ticket* that works exactly once and redirects to the session's real token,
+  which is the first path segment of every route and is compared in constant
+  time. The reason is that the address has to be handed to a browser as a
+  command-line argument, and on Linux `/proc/<pid>/cmdline` is world readable:
+  another user on the machine can read the browser's arguments for as long as
+  it runs. A single code there would be readable by anyone on the box, and this
+  page repaints a wall and writes a configuration file. A spent ticket buys
+  them nothing, and spending it first is a race they can only win by being
+  noticed, because the user's own browser then says the address has already
+  been opened.
+- **The `Host` header must be this server's own loopback address.** Without
+  that check, a name in someone else's DNS pointed at 127.0.0.1 makes their
+  page same-origin with this one, which is the whole DNS rebinding attack.
+- **`Sec-Fetch-Site` and `Origin`**, so another site the user happens to have
+  open cannot post here.
+- **A content security policy that allows nothing but this origin**, which is
+  also why the page loads no CDN and embeds no third-party code.
+
+### The panels are handed back once, and not taken again
+
+Enabling streaming mode is the only step that changes the device and cannot be
+undone, because the effect it replaces is known only to whoever saved it. Two
+things follow, and both were originally wrong here:
+
+The session opens the stream *last*. The port, the layout and the
+configuration path are all settled by `webui.New` before `Run` touches the
+device, so an address already in use no longer costs the user their effect.
+
+And nothing may take the panels back afterwards. The loop that paints them
+runs in its own goroutine, so `Run` waits for it before returning, and the
+stream refuses to reopen once it has been closed. Without both, a loop one
+tick behind the shutdown would re-enable streaming mode *after* the effect had
+been restored, leaving the panels stuck in it with the saved effect already
+spent — unrecoverable, and from the user's side indistinguishable from the
+program simply breaking their lights.
+
+### The tab is the session
+
+The event stream is the presence signal. When the last page disconnects the
+session ends on its own and the panels are handed back, because a calibration
+pattern left on the wall by a forgotten terminal is a bug the user cannot
+diagnose. Before any page has connected the wait is longer, since a cold
+browser can take a while to start.
+
+The other thing a session has to survive is a fight. The device leaves
+streaming mode whenever anything else selects an effect on it — the Nanoleaf
+app, a home automation, or the display itself starting up from a hook in the
+middle of a calibration — and the next datagram comes back refused. So a
+failed send reopens the stream and says so on the page, and only a device that
+keeps refusing for ten seconds ends the session. The daemon does the same
+thing for the same reason.
+
+### Vanilla, embedded, no build step
+
+The house frontend stack is SvelteKit, and this is the one place it is
+deliberately not used. The deploy target is a Go binary, and
+`go install .../cmd/nanoclaude@latest` has to remain the entire installation.
+A framework would mean either a JavaScript toolchain in front of the binary or
+build output committed to the repository, and this page is one SVG, five
+controls and 300 lines of DOM code. `go:embed` costs nothing and keeps the
+supply chain at zero.
+
 ## Lifetime
 
 The daemon is started by Claude Code, not by a service manager. `SessionStart`
@@ -409,4 +549,5 @@ sandbox. Set `NANOCLAUDE_IDLE_EXIT=0` there.
 | `internal/daemon` | Wiring and the loop. |
 | `internal/discover` | Sweeps the local networks for controllers. Scans rather than using mDNS, because reaching an mDNS advert needs a resolver running locally and that is not a safe assumption: on the machine this was written on, avahi-daemon was stopped while the panels answered fine. A /24 takes under a second. |
 | `internal/hooks` | Registers the Claude Code hooks. Edits `settings.json` in place with a JSON path library rather than decoding and re-encoding it, because Go marshals a map with its keys sorted and the file is hand-maintained: a re-encode would reshuffle 26 KB of configuration to add nine entries. |
+| `internal/webui` | The calibration page. Everything it draws is computed in Go and sent to it, so the picture on screen and the picture on the wall come from one frame. Embedded with `go:embed`: the deploy target is a Go binary, so `go install` must stay the whole installation. |
 | `internal/ui` | The shared styles, and the check for whether output is a terminal. Every live view has a plain counterpart, because a progress bar written to a pipe is a stream of escape codes. |
