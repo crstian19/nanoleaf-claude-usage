@@ -13,6 +13,7 @@ import (
 	"github.com/crstian19/nanoleaf-claude-usage/internal/shapes"
 	"github.com/crstian19/nanoleaf-claude-usage/internal/ui"
 	"github.com/crstian19/nanoleaf-claude-usage/internal/webui"
+	"github.com/crstian19/nanoleaf-claude-usage/pkg/nanoleaf"
 )
 
 func newPreviewCmd() *cobra.Command {
@@ -127,9 +128,11 @@ func previewInBrowser(cmd *cobra.Command, shapeName string, rotation, port int, 
 	}
 
 	server, err := webui.New(ctx, webui.Options{
-		Shapes:   offered,
-		Rotation: rotation,
-		Port:     port,
+		Shapes:    offered,
+		Rotation:  rotation,
+		Build:     buildableKinds(),
+		BuildSide: buildSide,
+		Port:      port,
 	})
 	if err != nil {
 		return err
@@ -140,7 +143,7 @@ func previewInBrowser(cmd *cobra.Command, shapeName string, rotation, port int, 
 	o.printf("%s\n\n", ui.Title.Render("Sample shapes in your browser"))
 	o.printf("  %s\n\n", ui.Value.Render(server.URL()))
 	for _, line := range []string{
-		"Pick an arrangement, turn it, and set the gauge where you like.",
+		"Pick an arrangement, or build your own by dragging panels onto it.",
 		"Nothing is sent to any device, so this is safe with the display running.",
 		"The address opens once. Run the command again for a new one.",
 	} {
@@ -161,6 +164,27 @@ func previewInBrowser(cmd *cobra.Command, shapeName string, rotation, port int, 
 	}
 	o.printf("\n%s\n", ui.Muted.Render("Stopped: "+server.Result().Reason))
 	return o.Err()
+}
+
+// buildSide is the edge length of a wall built on the page.
+//
+// The Shapes panels all share it, which is what lets them click together, and
+// a device reports one length for a whole layout in any case.
+const buildSide = 134
+
+// buildableKinds are the panels a page may drop onto a wall it is building.
+//
+// The Shapes family only. They are the panels that genuinely interconnect:
+// triangles, hexagons and mini triangles share an edge length and are sold to
+// be mixed. Offering a Canvas square here would build a wall that cannot
+// exist, since a square is a different size and does not clip to a triangle.
+// A grid of squares is one of the samples instead.
+func buildableKinds() []webui.Kind {
+	return []webui.Kind{
+		{Shape: nanoleaf.ShapeTriangle, Label: "Triangle"},
+		{Shape: nanoleaf.ShapeHexagon, Label: "Hexagon"},
+		{Shape: nanoleaf.ShapeMiniTriangle, Label: "Mini triangle"},
+	}
 }
 
 // offeredShapes is every sample, with the requested one first so the page

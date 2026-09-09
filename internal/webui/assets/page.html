@@ -25,6 +25,7 @@
       <svg id="shape" viewBox="-200 -200 400 400" aria-hidden="true">
         <g id="glow"></g>
         <g id="panels"></g>
+        <g id="spots"></g>
         <g id="labels"></g>
       </svg>
       <div class="ground"><span>floor</span></div>
@@ -54,6 +55,18 @@
   </section>
 
   <aside>
+    <section class="card" id="build-card" hidden>
+      <h2>Build</h2>
+      <p class="hint" id="build-hint">Drag a panel onto the wall. It sticks to whichever edge you
+         drop it on, and an edge that is taken will not take another.</p>
+      <div class="palette" id="palette"></div>
+      <div class="row">
+        <button type="button" id="undo">Undo</button>
+        <button type="button" id="clear">Clear</button>
+        <label><input type="checkbox" id="remove-tool"> Click a panel to take it off</label>
+      </div>
+    </section>
+
     <section class="card" id="arrangement-card" hidden>
       <h2>Arrangement</h2>
       <label class="field">

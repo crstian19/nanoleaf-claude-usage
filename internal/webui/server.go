@@ -133,6 +133,20 @@ type Options struct {
 	// panels and the picture flickers between them.
 	DisplayRunning bool
 
+	// Build offers a wall the page builds itself, by dropping these kinds
+	// of panel onto each other's edges. Empty leaves the page with only
+	// the arrangements it was given.
+	//
+	// It is for a session with no device: the panels of a wall someone
+	// invents have identities no real device has, so there is nothing to
+	// paint them on.
+	Build []Kind
+
+	// BuildSide is the edge length of that wall, in the device's own
+	// units. A device reports one length for a whole layout, so a built
+	// wall has one too.
+	BuildSide int
+
 	// Port is the loopback port to listen on. Zero picks a free one.
 	Port int
 }
@@ -190,6 +204,11 @@ type Server struct {
 	// the session gives up on them.
 	sendGrace time.Duration
 
+	// build is the wall the page is building, or nil when it cannot. Like
+	// everything else here it is behind mu; the render loop is handed its
+	// finished drawing rather than the editor itself.
+	build *editor
+
 	done     chan struct{}
 	stopOnce sync.Once
 }
@@ -200,8 +219,18 @@ type Server struct {
 // ctx bounds opening the listener only; the session's own lifetime is the
 // context passed to Run.
 func New(ctx context.Context, o Options) (*Server, error) {
-	if len(o.Shapes) == 0 {
+	if len(o.Shapes) == 0 && len(o.Build) == 0 {
 		return nil, errors.New("webui: at least one shape is required")
+	}
+	if len(o.Build) > 0 {
+		if o.Open != nil {
+			return nil, errors.New("webui: a wall the page builds cannot be painted on a device")
+		}
+		if o.BuildSide <= 0 {
+			return nil, fmt.Errorf("webui: a built wall needs a side length, got %d", o.BuildSide)
+		}
+		// Offered last, after the arrangements that already exist.
+		o.Shapes = append(o.Shapes, Shape{Name: BuildShape, Label: buildLabel})
 	}
 	if o.Port < 0 || o.Port > 65535 {
 		return nil, fmt.Errorf("webui: port %d is not a port number", o.Port)
@@ -209,6 +238,11 @@ func New(ctx context.Context, o Options) (*Server, error) {
 
 	pics := make(map[string]*picture, len(o.Shapes))
 	for _, shape := range o.Shapes {
+		if shape.Name == BuildShape {
+			// Nothing to draw yet: this one starts empty and grows
+			// as the page puts panels on it.
+			continue
+		}
 		pic, err := newPicture(shape.Layout)
 		if err != nil {
 			return nil, fmt.Errorf("webui: shape %q: %w", shape.Name, err)
@@ -244,6 +278,7 @@ func New(ctx context.Context, o Options) (*Server, error) {
 		sendGrace:  sendGrace,
 		done:       make(chan struct{}),
 		state: view{
+			Placing:  noPlacing,
 			Shape:    o.Shapes[0].Name,
 			Rotation: render.WrapDegrees(o.Rotation),
 			Mode:     ModePattern,
@@ -251,8 +286,14 @@ func New(ctx context.Context, o Options) (*Server, error) {
 			Phase:    render.PhaseIdle,
 		},
 	}
-	first := pics[o.Shapes[0].Name]
-	s.snap = first.snapshot(s.state, first.frame(s.state, 0))
+	if len(o.Build) > 0 {
+		s.build = newEditor(o.BuildSide, o.Build)
+	}
+	if first := pics[o.Shapes[0].Name]; first != nil {
+		s.snap = first.snapshot(s.state, first.frame(s.state, 0))
+	} else {
+		s.snap = emptySnapshot(s.state, o.BuildSide)
+	}
 	return s, nil
 }
 
@@ -455,9 +496,34 @@ func (s *Server) pump(ctx context.Context, stream Stream) error {
 
 		s.mu.Lock()
 		state := s.state
+		pic := s.pics[state.Shape]
+		editing := state.Shape == BuildShape && s.build != nil
+		if editing {
+			pic = s.build.pic
+		}
 		s.mu.Unlock()
 
-		pic := s.pics[state.Shape]
+		// A wall with nothing on it yet: there is no drawing, and the
+		// only thing to show is where the first panel can go.
+		if pic == nil {
+			s.mu.Lock()
+			snap := emptySnapshot(state, s.opt.BuildSide)
+			if editing && state.Placing != noPlacing {
+				snap.Spots = s.build.spotViews(state.Placing, emptyFrame())
+			}
+			snap.Editing = editing
+			snap.Trouble = s.trouble
+			s.snap = snap
+			alone := s.aloneLocked()
+			s.mu.Unlock()
+
+			if alone {
+				s.stop(s.idleReason())
+				return nil
+			}
+			continue
+		}
+
 		frame := pic.frame(state, time.Since(start))
 
 		// A session with no device paints nothing: the page is the
@@ -478,9 +544,13 @@ func (s *Server) pump(ctx context.Context, stream Stream) error {
 		// and deciding on who was watching a moment ago could end the
 		// session just as the browser arrives.
 		s.mu.Lock()
+		snap.Editing = editing
+		if editing && state.Placing != noPlacing {
+			snap.Spots = s.build.spotViews(state.Placing, frameOf(pic))
+		}
 		snap.Trouble = s.trouble
 		s.snap = snap
-		alone := s.clients == 0 && time.Since(s.idleSince) > s.graceLocked()
+		alone := s.aloneLocked()
 		s.mu.Unlock()
 
 		if alone {
@@ -508,6 +578,12 @@ func (s *Server) clearTrouble() {
 	defer s.mu.Unlock()
 	s.trouble = ""
 	s.failingSince = time.Time{}
+}
+
+// aloneLocked reports whether the session has been left with no page for
+// long enough to end. The caller must hold the lock.
+func (s *Server) aloneLocked() bool {
+	return s.clients == 0 && time.Since(s.idleSince) > s.graceLocked()
 }
 
 // graceLocked is how long the session may sit with no page attached. The

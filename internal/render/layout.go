@@ -1,8 +1,6 @@
 package render
 
 import (
-	"math"
-
 	"github.com/crstian19/nanoleaf-claude-usage/pkg/nanoleaf"
 )
 
@@ -48,38 +46,4 @@ func FromWall(wall Wall) (Geometry, []nanoleaf.Panel) {
 		skipped = nil
 	}
 	return NewGeometry(ids, xs, ys), skipped
-}
-
-// rotate turns the point cloud in place, about its own centroid.
-//
-// The centroid is used rather than the origin only for tidiness: the scene
-// coordinates that come out are normalised over the bounding box anyway, so
-// the centre of rotation cannot affect the result -- but keeping the numbers
-// small makes a printed layout readable.
-func rotate(xs, ys []float64, degrees float64) {
-	// Exact no-op for the common case, so an unrotated layout is not
-	// perturbed by floating-point error.
-	if math.Mod(degrees, 360) == 0 {
-		return
-	}
-
-	var sumX, sumY float64
-	for i := range xs {
-		sumX += xs[i]
-		sumY += ys[i]
-	}
-	n := float64(len(xs))
-	if n == 0 {
-		return
-	}
-	cx, cy := sumX/n, sumY/n
-
-	rad := degrees * math.Pi / 180
-	sin, cos := math.Sin(rad), math.Cos(rad)
-
-	for i := range xs {
-		dx, dy := xs[i]-cx, ys[i]-cy
-		xs[i] = dx*cos - dy*sin
-		ys[i] = dx*sin + dy*cos
-	}
 }

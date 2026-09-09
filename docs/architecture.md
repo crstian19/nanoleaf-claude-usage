@@ -531,6 +531,36 @@ rather than a lattice per shape family:
   from where it was asked for. `AttachToward(panel, up, …)` fails instead, and
   the row above a row of triangles hangs off an inverted one.
 
+### Dragging panels onto a wall
+
+The same builder is what the page edits. `nanoclaude preview --web` offers an
+empty wall as its last arrangement, and panels are dropped onto it with the
+mouse.
+
+The division of work is the same as everywhere else here: **the browser works
+out nothing**. While a panel is held, the session sends every place it could
+land — each one as the outline that panel would have there, in the same screen
+coordinates as the wall. The page draws those outlines, highlights the one
+nearest the cursor, and on release says only *which edge of which panel* it
+dropped on. The position comes back computed. So a wall cannot be built into a
+shape the tiling does not allow, whatever the page sends, and the wall that is
+drawn is the wall the gauge is then drawn on.
+
+Two things follow from letting the builder own the state:
+
+- **Every edit is a copy.** The editor applies a change to a clone of the wall
+  and keeps it only if it worked, so a refused placement leaves nothing behind
+  and the kept clones are the undo history. Undo needs no code of its own: it
+  is the previous clone.
+- **Identities survive removals.** Taking a panel off leaves its slot, because
+  a page holds panel IDs from a moment ago and renumbering them would make the
+  next click land on a different panel.
+
+The wall being built is only offered to a session with no device. Its panels
+have identities no real device has, so there is nothing to paint them on, and
+`webui.New` refuses the combination rather than streaming frames into
+nowhere.
+
 The positions are held exactly and rounded once, when the layout is reported.
 Rounding each step to the whole units a device reports compounded: twelve
 panels along a wall of mini triangles the tiling was four units out, which is

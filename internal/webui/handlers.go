@@ -40,6 +40,7 @@ func (s *Server) handler() http.Handler {
 	mux.Handle("GET /{token}/info", s.guard(s.handleInfo))
 	mux.Handle("GET /{token}/events", s.guard(s.handleEvents))
 	mux.Handle("POST /{token}/state", s.guard(s.handleState))
+	mux.Handle("POST /{token}/edit", s.guard(s.handleEdit))
 	mux.Handle("POST /{token}/save", s.guard(s.handleSave))
 	mux.Handle("POST /{token}/done", s.guard(s.handleDone))
 	mux.HandleFunc("/", handleStray)
@@ -188,6 +189,12 @@ type Info struct {
 	// configuration, which a sample shape cannot.
 	CanSave bool `json:"canSave"`
 
+	// BuildShape names the arrangement the page builds itself, and Kinds
+	// are the panels it may drop onto it. Empty when this session offers
+	// no such thing.
+	BuildShape string `json:"buildShape,omitempty"`
+	Kinds      []Kind `json:"kinds,omitempty"`
+
 	// Panels is how many panels the device reports and Lit how many of
 	// them the display can light.
 	Panels int `json:"panels"`
@@ -212,11 +219,27 @@ type Info struct {
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
+	// One critical section: the state and the wall being built have to be
+	// described as they were at the same moment.
 	s.mu.Lock()
 	state := s.state
+	layout := s.shapeNamed(state.Shape).Layout
+	if state.Shape == BuildShape && s.build != nil {
+		// The wall the page is building has no layout of its own until
+		// something is on it.
+		if built, err := s.build.wall().Layout(); err == nil {
+			layout = built
+		}
+	}
+	// The palette is fixed when the session starts, so it can be read
+	// here and used after the lock is dropped.
+	var buildShape string
+	var kinds []Kind
+	if s.build != nil {
+		buildShape, kinds = BuildShape, s.build.kinds
+	}
 	s.mu.Unlock()
 
-	layout := s.shapeNamed(state.Shape).Layout
 	usable, _ := render.Project(layout, state.Rotation).Lights()
 
 	options := make([]ShapeOption, 0, len(s.opt.Shapes))
@@ -234,6 +257,8 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	writeJSON(w, Info{
+		BuildShape:        buildShape,
+		Kinds:             kinds,
 		Shapes:            options,
 		Shape:             state.Shape,
 		Live:              s.opt.Open != nil,
@@ -378,6 +403,7 @@ func (s *Server) detach() {
 // page can send just the one the user moved.
 type stateRequest struct {
 	Shape    *string  `json:"shape"`
+	Placing  *int     `json:"placing"`
 	Rotation *int     `json:"rotation"`
 	Mode     *Mode    `json:"mode"`
 	Level    *float64 `json:"level"`
@@ -407,6 +433,16 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("unknown mode %q\n", *req.Mode), http.StatusBadRequest)
 		return
 	}
+	if req.Placing != nil && *req.Placing != noPlacing {
+		s.mu.Lock()
+		known := s.build != nil && s.build.knownKind(*req.Placing)
+		s.mu.Unlock()
+		if !known {
+			http.Error(w, fmt.Sprintf("no panel of kind %d can be placed here\n", *req.Placing),
+				http.StatusBadRequest)
+			return
+		}
+	}
 	if req.Shape != nil && !s.knownShape(*req.Shape) {
 		http.Error(w, fmt.Sprintf("no shape called %q\n", *req.Shape), http.StatusBadRequest)
 		return
@@ -419,6 +455,9 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if req.Shape != nil {
 		s.state.Shape = *req.Shape
+	}
+	if req.Placing != nil {
+		s.state.Placing = *req.Placing
 	}
 	if req.Rotation != nil {
 		s.state.Rotation = render.WrapDegrees(*req.Rotation)
@@ -494,6 +533,40 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	writeJSON(w, map[string]any{"rotation": rotation, "configPath": s.opt.ConfigPath})
+}
+
+// handleEdit changes the wall the page is building.
+//
+// Every change goes through the same geometry that draws it: a panel is stuck
+// to an edge, and an edge something is already on is refused. The page never
+// sends a position, only which edge of which panel it dropped on, so it
+// cannot put a panel somewhere the tiling does not allow.
+func (s *Server) handleEdit(w http.ResponseWriter, r *http.Request) {
+	var req editRequest
+	if err := decode(w, r, &req); err != nil {
+		http.Error(w, err.Error()+"\n", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.build == nil {
+		http.Error(w, "this session has no wall to build\n", http.StatusBadRequest)
+		return
+	}
+	if err := s.build.edit(req); err != nil {
+		// The builder's own words: they say which panel is in the way,
+		// or which direction has no edge, and the page shows them.
+		http.Error(w, err.Error()+"\n", http.StatusBadRequest)
+		return
+	}
+
+	// Whatever was being dragged has landed.
+	s.state.Placing = noPlacing
+	s.state.Shape = BuildShape
+
+	writeJSON(w, map[string]any{"panels": s.build.wall().Panels()})
 }
 
 // handleDone ends the session, which hands the panels back.

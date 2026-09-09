@@ -95,17 +95,28 @@ There are ten samples:
 Nothing is sent to a device in this mode, and nothing can be saved. It is
 safe to run while the display works.
 
-Each sample is built the way a wall is built: a panel is stuck to an edge of
-one already placed. Panels can go on in any order and the wall comes out the
-same, because every position comes from the edge it was attached to. An edge
-that already has a panel on it is refused.
+### Build your own
+
+The last entry in the list is an empty wall. Drag a triangle, a hexagon or a
+mini triangle onto it, and it sticks to whichever edge you drop it on.
+
+Every place the panel can land is drawn while you drag, as the outline it
+would have there. Drop it on one of them and that is where it goes. An edge
+that already has a panel on it will not take another, so panels can go on in
+any order. `Undo` and `Clear` go back, and one tick box turns a click into
+taking a panel off.
+
+Those three panels are the Shapes family, which all share an edge length and
+are sold to be mixed. Two mini triangles fit along one edge of a full one, so
+a mini gets two places on every edge.
+
+Nothing here is worked out in the browser. The page asks where a panel could
+go, draws the answer, and says which edge you dropped it on. That way the
+wall you build is the wall the gauge is drawn on.
 
 A test then holds every sample to the rule a wall follows: panels as close as
 neighbours get share a whole edge. That is how a wrong corner angle is caught,
 because on screen it draws a heap of overlapping shapes instead of a wall.
-
-If you want a sample of your own wall, or of the wall you are thinking of
-buying, ask. It is a few lines.
 
 `hooks install` writes to `~/.claude/settings.json`. It keeps every hook that
 is already there and it writes a backup first. It also edits the file in

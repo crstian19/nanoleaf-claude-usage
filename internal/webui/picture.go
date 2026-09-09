@@ -38,7 +38,12 @@ const maxLevel = 1.0
 type view struct {
 	// Shape is which arrangement is being drawn, by name. Empty when the
 	// session has only one.
-	Shape    string
+	Shape string
+
+	// Placing is the kind of panel being dragged onto the wall, or
+	// noPlacing. While it is set, every place that panel could go is sent
+	// with the picture.
+	Placing  int
 	Rotation int
 	Mode     Mode
 	Level    float64
@@ -63,6 +68,14 @@ type Snapshot struct {
 	Extent float64 `json:"extent"`
 
 	Panels []PanelView `json:"panels"`
+
+	// Editing says the wall on screen is one the page is building, so it
+	// can offer the palette and take panels off again.
+	Editing bool `json:"editing"`
+
+	// Spots are the places the panel being dragged could go, empty when
+	// nothing is being dragged.
+	Spots []SpotView `json:"spots,omitempty"`
 
 	// Trouble is what the panels last said when they refused a frame, so
 	// a wall that has gone dark says why on the page rather than only in
@@ -185,6 +198,28 @@ func (p *picture) snapshot(v view, frame nanoleaf.Frame) Snapshot {
 		Phase:    v.Phase.String(),
 		Extent:   p.extent,
 		Panels:   panels,
+	}
+}
+
+// emptySnapshot is the picture of a wall with nothing on it.
+//
+// It still needs an extent, because the page has to have a frame to draw the
+// first panel's landing spot in.
+func emptySnapshot(v view, side int) Snapshot {
+	extent := float64(side) * 2.2
+	if extent <= 0 {
+		extent = 300
+	}
+	return Snapshot{
+		Shape:    v.Shape,
+		Rotation: v.Rotation,
+		Mode:     v.Mode,
+		Level:    v.Level,
+		Phase:    v.Phase.String(),
+		Extent:   extent,
+		// Empty rather than absent: a JSON null here would be a
+		// missing list to the page, and it draws by walking the list.
+		Panels: []PanelView{},
 	}
 }
 

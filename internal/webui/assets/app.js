@@ -11,9 +11,25 @@ const el = (id) => document.getElementById(id);
 // replaceChildren() emptied the drawing and its options went inside it.
 const svg = el("shape");
 const dial = el("dial");
-const groups = { glow: el("glow"), panels: el("panels"), labels: el("labels") };
+const groups = {
+  glow: el("glow"),
+  panels: el("panels"),
+  spots: el("spots"),
+  labels: el("labels"),
+};
 
 const state = { shape: "", rotation: 0, mode: "pattern", level: 0.6, phase: "idle" };
+
+// The wall being built, when the page is building one.
+const editor = {
+  // shapes is the palette, kinds is what the server calls them, and armed is
+  // the kind waiting to be dropped.
+  kinds: [],
+  name: "",
+  armed: null,
+  spots: [],
+  nearest: null,
+};
 
 let extent = 0;
 let drawn = new Map(); // panel id -> its three elements
@@ -129,12 +145,15 @@ function draw(snap) {
     svg.setAttribute("viewBox", `${-extent} ${-extent} ${extent * 2} ${extent * 2}`);
   }
 
-  const ids = snap.panels.map((p) => p.id);
-  if (ids.length !== drawn.size || ids.some((id) => !drawn.has(id))) build(snap.panels);
+  const panels = snap.panels || [];
+  const ids = panels.map((p) => p.id);
+  if (ids.length !== drawn.size || ids.some((id) => !drawn.has(id))) build(panels);
 
-  for (const panel of snap.panels) {
+  for (const panel of panels) {
     const parts = drawn.get(panel.id);
     if (!parts) continue;
+    parts.fill.dataset.panel = String(panel.id);
+    parts.fill.classList.toggle("removable", el("remove-tool").checked);
     parts.fill.setAttribute("points", panel.points);
     parts.fill.setAttribute("fill", panel.color);
     parts.glow.setAttribute("points", panel.points);
@@ -147,6 +166,8 @@ function draw(snap) {
     if (parts.label.textContent !== order) parts.label.textContent = order;
   }
 
+  drawSpots(snap.spots || []);
+
   const trouble = el("trouble");
   if (snap.trouble) {
     trouble.textContent = `The panels are refusing frames: ${snap.trouble}`;
@@ -157,6 +178,55 @@ function draw(snap) {
 
   shownRotation = snap.rotation;
   turnDrawing();
+}
+
+// drawSpots shows every place the panel being dragged could land.
+//
+// The outlines come from nanoclaude, computed with the same geometry that
+// will place the panel, so the shape under the cursor is the shape that lands.
+function drawSpots(spots) {
+  editor.spots = spots;
+  if (spots.length !== groups.spots.childElementCount) {
+    groups.spots.replaceChildren();
+    for (const _ of spots) {
+      groups.spots.append(document.createElementNS(SVG_NS, "polygon"));
+    }
+  }
+  spots.forEach((spot, i) => {
+    const node = groups.spots.children[i];
+    node.setAttribute("points", spot.points);
+    node.classList.toggle("near", editor.nearest === i);
+  });
+}
+
+// markNearest highlights the spot the pointer is over.
+function markNearest(event) {
+  if (!editor.spots.length) return;
+
+  const at = inDrawing(event);
+  let best = null;
+  let bestGap = Infinity;
+  editor.spots.forEach((spot, i) => {
+    const gap = Math.hypot(spot.x - at.x, spot.y - at.y);
+    if (gap < bestGap) {
+      best = i;
+      bestGap = gap;
+    }
+  });
+  editor.nearest = best;
+  for (const [i, node] of [...groups.spots.children].entries()) {
+    node.classList.toggle("near", i === best);
+  }
+}
+
+// inDrawing converts a pointer position into the drawing's own coordinates,
+// which is the one piece of arithmetic the page needs to know where the mouse
+// is. Everything it compares against came from nanoclaude.
+function inDrawing(event) {
+  const ctm = groups.spots.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
+  return { x: point.x, y: point.y };
 }
 
 // turnDrawing shows the angle the user is on right now, without waiting for
@@ -218,11 +288,24 @@ function angleAt(event) {
 
 dial.addEventListener("pointerdown", (event) => {
   if (!live) return;
+  // A panel waiting to be dropped takes the click: the wall is where it
+  // lands, so pressing here places it rather than turning the shape. That is
+  // also the whole interaction on a touchscreen, where there is no dragging
+  // from a button that keeps the pointer.
+  if (editor.armed !== null) {
+    markNearest(event);
+    drop();
+    return;
+  }
   dial.setPointerCapture(event.pointerId);
   drag = { last: angleAt(event), from: state.rotation, moved: 0 };
 });
 
 dial.addEventListener("pointermove", (event) => {
+  if (editor.armed !== null) {
+    markNearest(event);
+    return;
+  }
   if (!drag) return;
   const now = angleAt(event);
   drag.moved += shortest(now - drag.last);
@@ -285,6 +368,120 @@ el("arrangement").addEventListener("change", async (event) => {
   await send({ shape: state.shape });
   // The facts describe the arrangement, so they change with it.
   await loadFacts();
+});
+
+// -- building a wall -------------------------------------------------------
+
+function palette(info) {
+  editor.kinds = info.kinds || [];
+  editor.name = info.buildShape || "";
+  const holder = el("palette");
+  holder.replaceChildren();
+
+  for (const kind of editor.kinds) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = kind.label;
+    button.dataset.shape = String(kind.shape);
+    button.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      button.setPointerCapture(event.pointerId);
+      arm(kind.shape, button);
+    });
+    button.addEventListener("pointermove", (event) => {
+      if (editor.armed === kind.shape) markNearest(event);
+    });
+    button.addEventListener("pointerup", (event) => {
+      if (editor.armed !== kind.shape) return;
+      // A click without a drag leaves the panel armed, so it can be
+      // dropped with a second click. That is also how this works on a
+      // touchscreen.
+      if (event.movementX === 0 && event.movementY === 0 && editor.nearest === null) return;
+      markNearest(event);
+      drop();
+    });
+    holder.append(button);
+  }
+}
+
+// arm picks up a panel: nanoclaude is told what is being dragged, and answers
+// with every place it could go.
+async function arm(shape, button) {
+  if (editor.armed === shape) {
+    disarm();
+    return;
+  }
+  editor.armed = shape;
+  dial.classList.add("placing");
+  editor.nearest = null;
+  for (const other of document.querySelectorAll(".palette button")) {
+    other.classList.toggle("armed", other === button);
+  }
+  await send({ placing: shape });
+}
+
+function disarm() {
+  dial.classList.remove("placing");
+  editor.armed = null;
+  editor.nearest = null;
+  editor.spots = [];
+  groups.spots.replaceChildren();
+  for (const button of document.querySelectorAll(".palette button")) {
+    button.classList.remove("armed");
+  }
+  send({ placing: -1 });
+}
+
+// drop places the armed panel on the spot under the cursor.
+async function drop() {
+  const spot = editor.nearest === null ? null : editor.spots[editor.nearest];
+  if (!spot) return;
+
+  const shape = editor.armed;
+  editor.armed = null;
+  editor.nearest = null;
+  dial.classList.remove("placing");
+  for (const button of document.querySelectorAll(".palette button")) {
+    button.classList.remove("armed");
+  }
+
+  const body =
+    spot.panel < 0
+      ? { action: "place", shape }
+      : { action: "attach", shape, panel: spot.panel, edge: spot.edge, half: spot.half };
+  const res = await post("edit", body);
+  if (res) {
+    setStatus("");
+    // The wall changed, and the facts describe the wall.
+    await loadFacts();
+  }
+  groups.spots.replaceChildren();
+  editor.spots = [];
+}
+
+// Clicking a panel takes it off, when that tool is on.
+groups.panels.addEventListener("click", async (event) => {
+  if (!el("remove-tool").checked) return;
+  const id = event.target instanceof Element ? event.target.dataset.panel : null;
+  if (!id) return;
+  if (await post("edit", { action: "remove", panel: Number(id) })) await loadFacts();
+});
+
+el("remove-tool").addEventListener("change", (event) => {
+  if (event.target.checked) disarm();
+  for (const node of groups.panels.children) {
+    node.classList.toggle("removable", event.target.checked);
+  }
+});
+
+for (const [id, action] of [["undo", "undo"], ["clear", "clear"]]) {
+  el(id).addEventListener("click", async () => {
+    if (await post("edit", { action })) await loadFacts();
+  });
+}
+
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && editor.armed !== null) disarm();
 });
 
 el("save").addEventListener("click", async () => {
@@ -369,6 +566,30 @@ function facts(info) {
       "sent to a device. The bottom of the shape is green and the top is red.";
   }
   el("save").hidden = !info.canSave;
+
+  const building = Boolean(info.buildShape) && info.shape === info.buildShape;
+  el("build-card").hidden = !building;
+  if (!building) disarmQuietly();
+  if (building) {
+    el("build-hint").textContent =
+      info.panels === 0
+        ? "Drag a panel onto the middle of the wall to start."
+        : "Drag a panel onto the wall. It sticks to whichever edge you drop it on, and an edge " +
+          "that is taken will not take another.";
+  }
+}
+
+// disarmQuietly forgets a dragged panel without telling the server, for when
+// the page has moved to another arrangement and there is nothing to tell.
+function disarmQuietly() {
+  dial.classList.remove("placing");
+  editor.armed = null;
+  editor.nearest = null;
+  editor.spots = [];
+  groups.spots.replaceChildren();
+  for (const button of document.querySelectorAll(".palette button")) {
+    button.classList.remove("armed");
+  }
 }
 
 async function start() {
@@ -376,6 +597,7 @@ async function start() {
     const info = await loadFacts();
     if (!info) return;
     shapePicker(info);
+    palette(info);
 
     state.shape = info.shape;
     state.mode = info.mode;

@@ -73,6 +73,7 @@ aside { display: grid; gap: 1.5rem; }
   outline-offset: 3px;
 }
 .dial:active { cursor: grabbing; }
+.dial.placing, .dial.placing:active { cursor: copy; }
 .dial:focus-visible { outline: 2px solid var(--accent); }
 
 #shape { display: block; width: 100%; height: auto; aspect-ratio: 1; }
@@ -110,6 +111,30 @@ aside { display: grid; gap: 1.5rem; }
   letter-spacing: .12em;
   text-transform: uppercase;
 }
+
+/* The places a dragged panel can land. Drawn from the outline the server says
+   it would have, so what is under the cursor is what lands. */
+#spots polygon {
+  fill: #7cc5ff14;
+  stroke: #7cc5ff66;
+  stroke-width: 3;
+  stroke-dasharray: 10 8;
+  pointer-events: none;
+}
+#spots polygon.near {
+  fill: #7cc5ff40;
+  stroke: var(--accent);
+  stroke-dasharray: none;
+}
+
+.palette { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .9rem; }
+.palette button { touch-action: none; cursor: grab; }
+.palette button.armed {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 22%, #1b212b);
+}
+
+#panels polygon.removable { cursor: crosshair; }
 
 .turn { display: flex; align-items: center; justify-content: center; gap: .5rem; }
 #angle {

@@ -22,6 +22,15 @@ type Wall struct {
 
 	// SideLength is the panel edge length in the device's own units.
 	SideLength int
+
+	// Turn is the rotation that was applied, so a caller can put a point
+	// which is not a panel into the same frame as the panels.
+	Turn Turn
+
+	// Rotation is the angle Turn applies, in degrees. A panel that is not
+	// in the layout -- one being dragged onto it -- has to be turned by it
+	// as well as moved.
+	Rotation float64
 }
 
 // WallPanel is one panel of a Wall.
@@ -45,32 +54,30 @@ type WallPanel struct {
 // extraRotation is added to the layout's own global orientation, in degrees,
 // for installations where the two do not agree.
 func Project(l nanoleaf.Layout, extraRotation int) Wall {
-	xs := make([]float64, len(l.Panels))
-	ys := make([]float64, len(l.Panels))
-	for i, p := range l.Panels {
-		xs[i], ys[i] = float64(p.X), float64(p.Y)
-	}
-
-	// The global orientation is SUBTRACTED, not added. It describes how
-	// the arrangement is rotated in the device's own frame, so undoing it
-	// is what brings the coordinates back to the wall. Getting the sign
-	// wrong is not a small error: verified against a real NL42 mounted at
-	// globalOrientation 302, adding it put the vertical axis 116 degrees
-	// out -- the fill climbed diagonally, which on a wall reads as a
-	// design choice rather than a bug.
-	degrees := float64(extraRotation - l.GlobalOrientation)
-	rotate(xs, ys, degrees)
+	turn, degrees := turnFor(l, extraRotation)
 
 	panels := make([]WallPanel, len(l.Panels))
 	for i, p := range l.Panels {
+		x, y := turn.Apply(float64(p.X), float64(p.Y))
 		panels[i] = WallPanel{
 			Panel:       p,
-			X:           xs[i],
-			Y:           ys[i],
+			X:           x,
+			Y:           y,
 			Orientation: float64(p.Orientation) + degrees,
 		}
 	}
-	return Wall{Panels: panels, SideLength: l.SideLength}
+	return Wall{Panels: panels, SideLength: l.SideLength, Turn: turn, Rotation: degrees}
+}
+
+// turnFor is the rotation that puts this layout on the wall, and the angle it
+// applies.
+func turnFor(l nanoleaf.Layout, extraRotation int) (Turn, float64) {
+	pos := make([]panelPos, len(l.Panels))
+	for i, p := range l.Panels {
+		pos[i] = panelPos{ID: p.ID, X: float64(p.X), Y: float64(p.Y)}
+	}
+	degrees := float64(extraRotation - l.GlobalOrientation)
+	return TurnOf(pos, degrees), degrees
 }
 
 // Lights returns only the panels that emit light and can be addressed, along

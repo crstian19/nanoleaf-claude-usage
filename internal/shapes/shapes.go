@@ -169,7 +169,7 @@ func zigzag() nanoleaf.Layout {
 // row sticks panels side by side, going right.
 func row(side, shapeType, count int) nanoleaf.Layout {
 	b := Start(side, shapeType)
-	last := 0
+	last := b.First()
 	for range count - 1 {
 		last = b.AttachToward(last, right, shapeType)
 	}
@@ -185,7 +185,7 @@ func row(side, shapeType, count int) nanoleaf.Layout {
 func block(side, shapeType, across, rows int) nanoleaf.Layout {
 	b := Start(side, shapeType)
 
-	last := 0
+	last := b.First()
 	toward := right
 	for r := range rows {
 		if r > 0 {
@@ -204,7 +204,7 @@ func block(side, shapeType, across, rows int) nanoleaf.Layout {
 func honeycomb() nanoleaf.Layout {
 	b := Start(shapesSide, nanoleaf.ShapeHexagon)
 	for edge := range 6 {
-		b.Attach(0, edge, nanoleaf.ShapeHexagon)
+		b.Attach(b.First(), edge, nanoleaf.ShapeHexagon)
 	}
 	return mustLayout(b)
 }
@@ -214,7 +214,7 @@ func honeycomb() nanoleaf.Layout {
 // pretending otherwise would draw a stack that does not touch.
 func hexColumn() nanoleaf.Layout {
 	b := Start(shapesSide, nanoleaf.ShapeHexagon)
-	last := 0
+	last := b.First()
 	for i := range 4 {
 		toward := 60.0
 		if i%2 == 1 {
@@ -235,7 +235,7 @@ func hexFlower() nanoleaf.Layout {
 		if edge%2 == 0 {
 			shapeType = nanoleaf.ShapeHexagon
 		}
-		b.Attach(0, edge, shapeType)
+		b.Attach(b.First(), edge, shapeType)
 	}
 	return mustLayout(b)
 }
@@ -246,6 +246,7 @@ func mixed() nanoleaf.Layout {
 	b := Start(shapesSide, nanoleaf.ShapeTriangle)
 
 	full := make([]int, 1, 4)
+	full[0] = b.First()
 	for range 3 {
 		full = append(full, b.AttachToward(full[len(full)-1], right, nanoleaf.ShapeTriangle))
 	}
@@ -282,6 +283,7 @@ func aurora() nanoleaf.Layout {
 	// inverted triangle has an edge facing up, and they are every other
 	// one.
 	bottom := make([]int, 1, 5)
+	bottom[0] = b.First()
 	for range 4 {
 		bottom = append(bottom, b.AttachToward(bottom[len(bottom)-1], right, nanoleaf.ShapeLightPanel))
 	}
