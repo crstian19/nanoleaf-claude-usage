@@ -6,11 +6,14 @@ const api = location.pathname.replace(/\/+$/, "");
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const el = (id) => document.getElementById(id);
+// The drawing is #shape and the picker is #arrangement. They were both called
+// "shape" once, and getElementById returned the SVG for both: the picker's
+// replaceChildren() emptied the drawing and its options went inside it.
 const svg = el("shape");
 const dial = el("dial");
 const groups = { glow: el("glow"), panels: el("panels"), labels: el("labels") };
 
-const state = { rotation: 0, mode: "pattern", level: 0.6, phase: "idle" };
+const state = { shape: "", rotation: 0, mode: "pattern", level: 0.6, phase: "idle" };
 
 let extent = 0;
 let drawn = new Map(); // panel id -> its three elements
@@ -277,6 +280,13 @@ el("phase").addEventListener("change", (event) => {
   send({ phase: state.phase });
 });
 
+el("arrangement").addEventListener("change", async (event) => {
+  state.shape = event.target.value;
+  await send({ shape: state.shape });
+  // The facts describe the arrangement, so they change with it.
+  await loadFacts();
+});
+
 el("save").addEventListener("click", async () => {
   const res = await post("save", { rotation: state.rotation });
   if (!res) return;
@@ -294,6 +304,35 @@ el("done").addEventListener("click", async () => {
 });
 
 // -- start ------------------------------------------------------------------
+
+// loadFacts reads what does not change while the shape is being turned, and
+// puts it on the page. Called again after the arrangement changes, because
+// then it does.
+async function loadFacts() {
+  const res = await fetch(`${api}/info`);
+  if (!res.ok) {
+    stop(`nanoclaude refused this page: ${(await res.text()).trim()}`, "bad");
+    return null;
+  }
+  const info = await res.json();
+  facts(info);
+  return info;
+}
+
+function shapePicker(info) {
+  const select = el("arrangement");
+  if (!info.shapes || info.shapes.length < 2) return;
+
+  select.replaceChildren();
+  for (const shape of info.shapes) {
+    const option = document.createElement("option");
+    option.value = shape.name;
+    option.textContent = shape.label;
+    select.append(option);
+  }
+  select.value = info.shape;
+  el("arrangement-card").hidden = false;
+}
 
 function facts(info) {
   const rows = [
@@ -320,18 +359,25 @@ function facts(info) {
     note.hidden = false;
   }
   el("fighting").hidden = !info.displayRunning;
+
+  // A sample arrangement is nobody's wall: there is nothing to send a
+  // picture to, and no angle worth writing down.
+  if (!info.live) {
+    document.querySelector("h1").textContent = "See the display on other shapes";
+    el("intro").textContent =
+      "This is a sample arrangement, so the page is the whole display and nothing is being " +
+      "sent to a device. The bottom of the shape is green and the top is red.";
+  }
+  el("save").hidden = !info.canSave;
 }
 
 async function start() {
   try {
-    const res = await fetch(`${api}/info`);
-    if (!res.ok) {
-      stop(`nanoclaude refused this page: ${(await res.text()).trim()}`, "bad");
-      return;
-    }
-    const info = await res.json();
-    facts(info);
+    const info = await loadFacts();
+    if (!info) return;
+    shapePicker(info);
 
+    state.shape = info.shape;
     state.mode = info.mode;
     state.level = info.level;
     state.phase = info.phase;

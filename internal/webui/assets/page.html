@@ -10,9 +10,9 @@
 
 <header class="head">
   <h1>Turn the shape until it matches your wall</h1>
-  <p>Your panels are lit <strong class="green">green along the bottom</strong> of the shape and
-     <strong class="red">red along the top</strong>. Drag the shape below until it sits the way the
-     real one does, then save.</p>
+  <p id="intro">Your panels are lit <strong class="green">green along the bottom</strong> of the
+     shape and <strong class="red">red along the top</strong>. Drag the shape below until it sits
+     the way the real one does, then save.</p>
   <p class="warn" id="trouble" hidden></p>
   <p class="warn" id="fighting" hidden>The display is running and is painting the same panels. Stop it
      with <code>nanoclaude down</code> or the two will fight over the wall.</p>
@@ -54,6 +54,15 @@
   </section>
 
   <aside>
+    <section class="card" id="arrangement-card" hidden>
+      <h2>Arrangement</h2>
+      <label class="field">
+        <select id="arrangement" aria-label="Which arrangement to draw"></select>
+      </label>
+      <p class="hint">Sample walls, so the display can be seen on an arrangement you do not
+         own. Nothing is sent to a device.</p>
+    </section>
+
     <section class="card">
       <h2>Picture on the wall</h2>
       <div class="row">

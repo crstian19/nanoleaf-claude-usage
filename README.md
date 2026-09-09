@@ -71,6 +71,33 @@ the shape as coloured blocks instead of as your panels.
 The page can also paint the real display at any level you choose. Use it to
 look at the gauge without waiting to spend a real allowance.
 
+### Other shapes
+
+Every wall is different, so the display has to read well on more than one.
+`nanoclaude preview --web` opens the same page over a set of sample
+arrangements:
+
+```sh
+nanoclaude preview --web                        # all of them, pick from the page
+nanoclaude preview --shape hexagons-honeycomb   # one of them, in the terminal
+```
+
+There are nine samples:
+
+- Hexagons in a honeycomb, and hexagons in a column.
+- Canvas squares in a grid.
+- Triangles in a row, in a block, and in the zigzag this was written on.
+- Mini triangles, and a mixed set of both sizes.
+- The original Light Panels, the triangles from the Aurora.
+
+Nothing is sent to a device in this mode, and nothing can be saved. It is
+safe to run while the display works.
+
+Each sample is built from the tiling the real panels click together in. A test
+then holds every one of them to the rule a wall follows: panels that touch
+share a whole edge. That is how a wrong corner angle is caught, because on
+screen it draws a heap of overlapping shapes instead of a wall.
+
 `hooks install` writes to `~/.claude/settings.json`. It keeps every hook that
 is already there and it writes a backup first. It also edits the file in
 place, so keys it does not touch keep their order. Run it again after an
@@ -96,12 +123,12 @@ You can also control it by hand:
 | `nanoclaude pair` | Get an API token from panels in pairing mode |
 | `nanoclaude calibrate` | Open the page that turns the shape to match your wall |
 | `nanoclaude layout` | Print the panel positions and the scene coordinates |
-| `nanoclaude preview` | Draw a scene in the terminal, without touching the panels |
+| `nanoclaude preview` | Draw a scene without touching the panels, on your shape or a sample |
 | `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |
 | `nanoclaude brightness` | Report or set the panels' global brightness |
 
-`nanoclaude preview` runs without a device. It falls back to a stand-in shape
-of nine panels, which is useful to adjust the look:
+`nanoclaude preview` runs without a device. It falls back to a sample
+arrangement, which is useful to adjust the look:
 
 ```sh
 nanoclaude preview --budget 0.85 --phase tool --animate 8s

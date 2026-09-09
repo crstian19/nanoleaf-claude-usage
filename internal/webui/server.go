@@ -76,16 +76,38 @@ const (
 	sendGrace = 10 * time.Second
 )
 
+// Shape is one arrangement the page can draw.
+type Shape struct {
+	// Name identifies it in a request. It may be empty when a session has
+	// only one shape.
+	Name string
+	// Label says what it is, for the page's list.
+	Label string
+	// Layout is the arrangement, as a device reports it.
+	Layout nanoleaf.Layout
+}
+
 // Options configures a Server.
 type Options struct {
-	// Layout is the device's panel arrangement.
-	Layout nanoleaf.Layout
+	// Shapes are the arrangements the page may draw, the first being the
+	// one it opens on.
+	//
+	// A session driving a real device has exactly one: the panels on the
+	// wall. A session showing samples has a list, and the page offers a
+	// picker -- which is what makes it possible to see what the display
+	// looks like on a honeycomb of hexagons or a grid of squares without
+	// owning either.
+	Shapes []Shape
 
 	// Rotation is the angle the session starts at.
 	Rotation int
 
 	// Open takes the panels over. It is called once, when Run starts, and
 	// again whenever the device drops the stream.
+	//
+	// Nil means there is no device: the page is live and the pictures are
+	// computed, but nothing is sent anywhere. That is the mode the sample
+	// shapes run in.
 	//
 	// The session opens the stream rather than being handed one because
 	// enabling streaming mode is the only step that changes the device
@@ -96,6 +118,10 @@ type Options struct {
 
 	// Save persists an accepted rotation. It is called from a request
 	// handler, so it must be safe to call at any time.
+	//
+	// Nil means a rotation cannot be saved, which is the honest answer for
+	// a shape that is not on the user's wall. The page then offers no
+	// button for it.
 	Save func(rotation int) error
 
 	// ConfigPath is the file Save writes, shown on the page so a user can
@@ -114,8 +140,13 @@ type Options struct {
 // Server is one calibration session: a page on the loopback interface, and
 // the panels following whatever that page is showing.
 type Server struct {
-	opt  Options
-	pic  *picture
+	opt Options
+
+	// pics is one drawing per shape, by name, built up front so a shape
+	// that cannot be drawn is refused before a page opens rather than
+	// when someone picks it.
+	pics map[string]*picture
+
 	ln   net.Listener
 	host string
 
@@ -169,16 +200,20 @@ type Server struct {
 // ctx bounds opening the listener only; the session's own lifetime is the
 // context passed to Run.
 func New(ctx context.Context, o Options) (*Server, error) {
-	if o.Open == nil || o.Save == nil {
-		return nil, errors.New("webui: Open and Save are required")
+	if len(o.Shapes) == 0 {
+		return nil, errors.New("webui: at least one shape is required")
 	}
 	if o.Port < 0 || o.Port > 65535 {
 		return nil, fmt.Errorf("webui: port %d is not a port number", o.Port)
 	}
 
-	pic, err := newPicture(o.Layout)
-	if err != nil {
-		return nil, err
+	pics := make(map[string]*picture, len(o.Shapes))
+	for _, shape := range o.Shapes {
+		pic, err := newPicture(shape.Layout)
+		if err != nil {
+			return nil, fmt.Errorf("webui: shape %q: %w", shape.Name, err)
+		}
+		pics[shape.Name] = pic
 	}
 
 	// The page can change what the wall is showing and can write to the
@@ -198,7 +233,7 @@ func New(ctx context.Context, o Options) (*Server, error) {
 
 	s := &Server{
 		opt:        o,
-		pic:        pic,
+		pics:       pics,
 		token:      token,
 		ticket:     ticket,
 		ln:         ln,
@@ -209,13 +244,15 @@ func New(ctx context.Context, o Options) (*Server, error) {
 		sendGrace:  sendGrace,
 		done:       make(chan struct{}),
 		state: view{
+			Shape:    o.Shapes[0].Name,
 			Rotation: render.WrapDegrees(o.Rotation),
 			Mode:     ModePattern,
 			Level:    0.6,
 			Phase:    render.PhaseIdle,
 		},
 	}
-	s.snap = pic.snapshot(s.state, pic.frame(s.state, 0))
+	first := pics[o.Shapes[0].Name]
+	s.snap = first.snapshot(s.state, first.frame(s.state, 0))
 	return s, nil
 }
 
@@ -316,14 +353,19 @@ func (s *Server) Result() Result {
 // or ctx is cancelled.
 func (s *Server) Run(ctx context.Context) error {
 	// The one destructive step, and the first thing that happens after
-	// every other failure has already been ruled out by New.
-	stream, err := Reopening(ctx, s.opt.Open)
-	if err != nil {
-		return err
+	// every other failure has already been ruled out by New. A session
+	// with no device skips it and paints nothing.
+	var stream Stream
+	if s.opt.Open != nil {
+		opened, err := Reopening(ctx, s.opt.Open)
+		if err != nil {
+			return err
+		}
+		stream = opened
+		// Runs after the wait for the pump below, so the panels are
+		// never given up while a frame is still being painted.
+		defer func() { _ = opened.Close() }()
 	}
-	// Runs after the wait for the pump below, so the panels are never
-	// given up while a frame is still being painted.
-	defer func() { _ = stream.Close() }()
 
 	srv := &http.Server{
 		Handler:           s.handler(),
@@ -415,16 +457,22 @@ func (s *Server) pump(ctx context.Context, stream Stream) error {
 		state := s.state
 		s.mu.Unlock()
 
-		frame := s.pic.frame(state, time.Since(start))
-		if err := stream.Send(frame); err != nil {
-			if gaveUp := s.noteTrouble(err); gaveUp {
-				return err
+		pic := s.pics[state.Shape]
+		frame := pic.frame(state, time.Since(start))
+
+		// A session with no device paints nothing: the page is the
+		// whole display.
+		if stream != nil {
+			if err := stream.Send(frame); err != nil {
+				if gaveUp := s.noteTrouble(err); gaveUp {
+					return err
+				}
+			} else {
+				s.clearTrouble()
 			}
-		} else {
-			s.clearTrouble()
 		}
 
-		snap := s.pic.snapshot(state, frame)
+		snap := pic.snapshot(state, frame)
 
 		// Read after the send, not before: a send can take a moment,
 		// and deciding on who was watching a moment ago could end the

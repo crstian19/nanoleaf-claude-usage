@@ -165,9 +165,29 @@ func (s *Server) handleAsset(name, contentType string) http.HandlerFunc {
 	}
 }
 
+// ShapeOption is one entry of the page's shape picker.
+type ShapeOption struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+}
+
 // Info is what the page needs once: the things that do not change while the
 // shape is being turned.
 type Info struct {
+	// Shapes are the arrangements that can be drawn, and Shape is the one
+	// being drawn now. A single unnamed shape means there is nothing to
+	// pick from.
+	Shapes []ShapeOption `json:"shapes"`
+	Shape  string        `json:"shape"`
+
+	// Live says whether the panels on a wall are being painted. False for
+	// the sample shapes, where the page is the only display.
+	Live bool `json:"live"`
+
+	// CanSave says whether a rotation can be written to the
+	// configuration, which a sample shape cannot.
+	CanSave bool `json:"canSave"`
+
 	// Panels is how many panels the device reports and Lit how many of
 	// them the display can light.
 	Panels int `json:"panels"`
@@ -196,12 +216,17 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	state := s.state
 	s.mu.Unlock()
 
-	wall := render.Project(s.opt.Layout, state.Rotation)
-	usable, _ := wall.Lights()
+	layout := s.shapeNamed(state.Shape).Layout
+	usable, _ := render.Project(layout, state.Rotation).Lights()
+
+	options := make([]ShapeOption, 0, len(s.opt.Shapes))
+	for _, shape := range s.opt.Shapes {
+		options = append(options, ShapeOption{Name: shape.Name, Label: shape.Label})
+	}
 
 	seen := map[int]bool{}
 	unknown := []int{}
-	for _, p := range s.opt.Layout.Panels {
+	for _, p := range layout.Panels {
 		if !nanoleaf.IsKnownShape(p.ShapeType) && !seen[p.ShapeType] {
 			seen[p.ShapeType] = true
 			unknown = append(unknown, p.ShapeType)
@@ -209,10 +234,14 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	writeJSON(w, Info{
-		Panels:            len(s.opt.Layout.Panels),
+		Shapes:            options,
+		Shape:             state.Shape,
+		Live:              s.opt.Open != nil,
+		CanSave:           s.opt.Save != nil,
+		Panels:            len(layout.Panels),
 		Lit:               len(usable),
-		SideLength:        s.opt.Layout.SideLength,
-		GlobalOrientation: s.opt.Layout.GlobalOrientation,
+		SideLength:        layout.SideLength,
+		GlobalOrientation: layout.GlobalOrientation,
 		UnknownShapes:     unknown,
 		ConfigPath:        s.opt.ConfigPath,
 		DisplayRunning:    s.opt.DisplayRunning,
@@ -221,6 +250,27 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 		Level:             state.Level,
 		Phase:             state.Phase.String(),
 	})
+}
+
+// shapeNamed finds a shape the session offers, falling back to the first so
+// a caller always has a layout to work from.
+func (s *Server) shapeNamed(name string) Shape {
+	for _, shape := range s.opt.Shapes {
+		if shape.Name == name {
+			return shape
+		}
+	}
+	return s.opt.Shapes[0]
+}
+
+// knownShape reports whether the session offers a shape by that name.
+func (s *Server) knownShape(name string) bool {
+	for _, shape := range s.opt.Shapes {
+		if shape.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // handleEvents streams the picture to the page.
@@ -327,6 +377,7 @@ func (s *Server) detach() {
 // stateRequest is a change to the controls. Every field is optional, so the
 // page can send just the one the user moved.
 type stateRequest struct {
+	Shape    *string  `json:"shape"`
 	Rotation *int     `json:"rotation"`
 	Mode     *Mode    `json:"mode"`
 	Level    *float64 `json:"level"`
@@ -356,12 +407,19 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("unknown mode %q\n", *req.Mode), http.StatusBadRequest)
 		return
 	}
+	if req.Shape != nil && !s.knownShape(*req.Shape) {
+		http.Error(w, fmt.Sprintf("no shape called %q\n", *req.Shape), http.StatusBadRequest)
+		return
+	}
 
 	// One critical section, and only the fields the request named. Reading
 	// the whole state, changing a copy and writing it back would lose a
 	// change made in between -- a save landing mid-drag would have its
 	// rotation overwritten by the drag's next frame.
 	s.mu.Lock()
+	if req.Shape != nil {
+		s.state.Shape = *req.Shape
+	}
 	if req.Rotation != nil {
 		s.state.Rotation = render.WrapDegrees(*req.Rotation)
 	}
@@ -378,6 +436,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	writeJSON(w, stateResponse{
+		Shape:    next.Shape,
 		Rotation: next.Rotation,
 		Mode:     next.Mode,
 		Level:    next.Level,
@@ -390,6 +449,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 // rotation that got wrapped or a level that got clamped reaches the display
 // the user is looking at.
 type stateResponse struct {
+	Shape    string  `json:"shape"`
 	Rotation int     `json:"rotation"`
 	Mode     Mode    `json:"mode"`
 	Level    float64 `json:"level"`
@@ -404,6 +464,14 @@ type saveRequest struct {
 }
 
 func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Save == nil {
+		// A sample shape is not on anybody's wall, so an angle for it
+		// means nothing. The page offers no button, and this is the
+		// answer for anything else that asks.
+		http.Error(w, "this session has no configuration to write to\n", http.StatusBadRequest)
+		return
+	}
+
 	var req saveRequest
 	if err := decode(w, r, &req); err != nil {
 		http.Error(w, err.Error()+"\n", http.StatusBadRequest)

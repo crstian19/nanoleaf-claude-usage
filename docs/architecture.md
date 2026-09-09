@@ -497,6 +497,29 @@ failed send reopens the stream and says so on the page, and only a device that
 keeps refusing for ten seconds ends the session. The daemon does the same
 thing for the same reason.
 
+### Sample shapes, because every wall is different
+
+The arrangement this was written against is nine triangles in a diagonal
+zigzag. Nothing about the drawing, the bands or the long axis is allowed to
+depend on that, and the only way to know is to look at other walls.
+`internal/shapes` holds nine of them, built from the tilings the real products
+click together in: honeycombs, grids, rows, blocks, two sizes of triangle
+mixed, and the original Light Panels. `nanoclaude preview --web` serves the
+same page over them with no device attached, so there is nothing to paint and
+no angle worth saving — the page hides its Save button and says so.
+
+The samples are also what the outlines are measured against.
+`TestEverySampleShapeTiles` holds every one of them to the property a real
+wall has: two panels of the same kind that sit closest to each other are edge
+to edge, so their outlines share exactly two corners. A corner angle out by a
+sixth of a turn on triangles, a twelfth on hexagons or an eighth on squares
+all fail it, and all three would otherwise draw a heap of overlapping shapes
+that only a person looking at the page would notice.
+
+Mixed sets are the one place the drawing still guesses. A device reports a
+single side length and a set holding both sizes of triangle has two, so a mini
+is halved only when full triangles are present as well.
+
 ### Vanilla, embedded, no build step
 
 The house frontend stack is SvelteKit, and this is the one place it is
@@ -549,5 +572,6 @@ sandbox. Set `NANOCLAUDE_IDLE_EXIT=0` there.
 | `internal/daemon` | Wiring and the loop. |
 | `internal/discover` | Sweeps the local networks for controllers. Scans rather than using mDNS, because reaching an mDNS advert needs a resolver running locally and that is not a safe assumption: on the machine this was written on, avahi-daemon was stopped while the panels answered fine. A /24 takes under a second. |
 | `internal/hooks` | Registers the Claude Code hooks. Edits `settings.json` in place with a JSON path library rather than decoding and re-encoding it, because Go marshals a map with its keys sorted and the file is hand-maintained: a re-encode would reshuffle 26 KB of configuration to add nine entries. |
+| `internal/shapes` | Sample arrangements, built from the tilings the real panels click together in. They exist because a display that only reads well on one wall is not finished, and because the outlines have to be measured against something other than the author's own wall. |
 | `internal/webui` | The calibration page. Everything it draws is computed in Go and sent to it, so the picture on screen and the picture on the wall come from one frame. Embedded with `go:embed`: the deploy target is a Go binary, so `go install` must stay the whole installation. |
 | `internal/ui` | The shared styles, and the check for whether output is a terminal. Every live view has a plain counterpart, because a progress bar written to a pipe is a stream of escape codes. |

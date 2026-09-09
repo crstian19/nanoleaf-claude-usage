@@ -103,7 +103,7 @@ func newTestServer(t *testing.T) (*Server, *panels) {
 	t.Helper()
 	rec := &panels{}
 	s, err := New(t.Context(), Options{
-		Layout:     realLayout(),
+		Shapes:     []Shape{{Layout: realLayout()}},
 		Rotation:   0,
 		Open:       rec.open,
 		Save:       rec.save,
@@ -442,6 +442,83 @@ func TestThePanelsAreNotTakenBackAfterTheSession(t *testing.T) {
 // framePeriodForTest is the pump's tick, named here so the wait above is
 // obviously more than one frame.
 const framePeriodForTest = FramePeriod
+
+// TestASessionWithNoDeviceDrawsAnyway is the mode the sample shapes run in:
+// a page with no panels behind it. It has to be live in every other respect,
+// because it is what somebody looks at to decide whether this is worth
+// mounting anything for.
+func TestASessionWithNoDeviceDrawsAnyway(t *testing.T) {
+	rec := &panels{}
+	s, err := New(t.Context(), Options{
+		Shapes: []Shape{
+			{Name: "one", Label: "the wall this was written on", Layout: realLayout()},
+			{Name: "two", Label: "a square", Layout: squareLayout()},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	s.openGrace = time.Hour
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+
+	// A picture is produced without a device to send it to.
+	waitFor(t, func() bool { return len(s.snapshot().Panels) > 0 })
+	if rec.sent() != 0 {
+		t.Errorf("%d frames were sent by a session with no device", rec.sent())
+	}
+
+	// The shape can be changed, which is the whole point of the mode.
+	if code := call(t, s, http.MethodPost, s.pageURL()+"state", `{"shape":"two"}`).Code; code != http.StatusOK {
+		t.Fatalf("picking a shape returned %d", code)
+	}
+	waitFor(t, func() bool { return s.snapshot().Shape == "two" })
+	if got := len(s.snapshot().Panels); got != 4 {
+		t.Errorf("the square shape drew %d panels, want 4", got)
+	}
+	if code := call(t, s, http.MethodPost, s.pageURL()+"state", `{"shape":"nope"}`).Code; code != http.StatusBadRequest {
+		t.Errorf("an unknown shape returned %d, want 400", code)
+	}
+
+	// And nothing can be saved, because none of it is on a wall.
+	if code := call(t, s, http.MethodPost, s.pageURL()+"save", `{"rotation":30}`).Code; code != http.StatusBadRequest {
+		t.Errorf("saving a sample shape returned %d, want 400", code)
+	}
+
+	var info Info
+	if err := json.Unmarshal(call(t, s, http.MethodGet, s.pageURL()+"info", "").Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.Live || info.CanSave {
+		t.Errorf("the page is told live=%v canSave=%v", info.Live, info.CanSave)
+	}
+	if len(info.Shapes) != 2 || info.Shapes[1].Label != "a square" {
+		t.Errorf("the page was offered %+v", info.Shapes)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("the session ended with %v", err)
+	}
+}
+
+// squareLayout is a four-panel Canvas, small enough to be counted in a test.
+func squareLayout() nanoleaf.Layout {
+	return nanoleaf.Layout{
+		NumPanels:  4,
+		SideLength: 100,
+		Panels: []nanoleaf.Panel{
+			{ID: 1, X: 0, Y: 0, ShapeType: nanoleaf.ShapeSquare},
+			{ID: 2, X: 100, Y: 0, ShapeType: nanoleaf.ShapeSquare},
+			{ID: 3, X: 0, Y: 100, ShapeType: nanoleaf.ShapeSquare},
+			{ID: 4, X: 100, Y: 100, ShapeType: nanoleaf.ShapeSquare},
+		},
+	}
+}
 
 // TestSessionEndsWithNoBrowser hands the panels back on its own. Without it a
 // browser that never opened, or a terminal left behind, would leave a

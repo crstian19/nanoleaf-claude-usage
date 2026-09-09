@@ -36,6 +36,9 @@ const maxLevel = 1.0
 
 // view is everything the page controls.
 type view struct {
+	// Shape is which arrangement is being drawn, by name. Empty when the
+	// session has only one.
+	Shape    string
 	Rotation int
 	Mode     Mode
 	Level    float64
@@ -48,6 +51,7 @@ type view struct {
 // for the screen. The point of the page is to agree with the wall, so both
 // come from the same frame.
 type Snapshot struct {
+	Shape    string  `json:"shape"`
 	Rotation int     `json:"rotation"`
 	Mode     Mode    `json:"mode"`
 	Level    float64 `json:"level"`
@@ -171,6 +175,7 @@ func (p *picture) snapshot(v view, frame nanoleaf.Frame) Snapshot {
 	}
 
 	return Snapshot{
+		Shape:    v.Shape,
 		Rotation: v.Rotation,
 		Mode:     v.Mode,
 		Level:    v.Level,

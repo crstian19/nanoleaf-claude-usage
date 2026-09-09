@@ -122,7 +122,7 @@ func calibrateInBrowser(cmd *cobra.Command, client *nanoleaf.Client, rotation, p
 	// changes the device and cannot be undone without knowing which
 	// effect was selected before.
 	server, err := webui.New(ctx, webui.Options{
-		Layout:   layout,
+		Shapes:   []webui.Shape{{Label: "your panels", Layout: layout}},
 		Rotation: rotation,
 		Open: func(streamCtx context.Context) (webui.Stream, error) {
 			return client.OpenStream(streamCtx, webui.FramePeriod)
