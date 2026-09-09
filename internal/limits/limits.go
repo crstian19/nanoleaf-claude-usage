@@ -153,10 +153,28 @@ func retryAfter(h http.Header) time.Duration {
 	return fallback
 }
 
-// limit is one of the rate-limit buckets the endpoint reports.
+// limit is one of the rate-limit buckets a source reports.
+//
+// Both spellings of the same number are accepted. Claude Code calls it
+// used_percentage where it originates -- in the rate_limits block it hands to
+// a status line -- and claude-pulse renames it to utilization when it caches
+// it. Reading both means either source can be used without a translation
+// layer.
 type limit struct {
-	Utilization float64 `json:"utilization"`
-	ResetsAt    any     `json:"resets_at"`
+	UsedPercentage *float64 `json:"used_percentage"`
+	Utilization    *float64 `json:"utilization"`
+	ResetsAt       any      `json:"resets_at"`
+}
+
+// percentage returns the bucket's used percentage, and whether it had one.
+func (l limit) percentage() (float64, bool) {
+	switch {
+	case l.UsedPercentage != nil:
+		return *l.UsedPercentage, true
+	case l.Utilization != nil:
+		return *l.Utilization, true
+	}
+	return 0, false
 }
 
 // parseUsage decodes the response.
@@ -181,22 +199,29 @@ func parseUsage(r io.Reader, now time.Time) (Snapshot, error) {
 
 // fromLimit normalises one bucket into a Snapshot.
 //
-// Utilization is accepted as either a percentage or a fraction because the
-// two sources disagree: the status line cache stores 32.0 for a third of the
-// allowance, and there is no guarantee the API is consistent about it either.
+// The value is always a percentage, and this used to try to infer that from
+// its magnitude -- treating anything above 1 as a percentage and anything
+// below as a fraction. That guess is right for most of the range and
+// catastrophically wrong at the bottom of it: an allowance 1% spent arrives
+// as 1.0, which the heuristic read as fully spent. The display sat at full
+// red having used a hundredth of the session.
+//
+// There was never any need to guess. Claude Code's own field is called
+// used_percentage, pulse clamps it to 100 when drawing, and every observed
+// value across both sources has been a percentage.
 func fromLimit(l limit, at time.Time) (Snapshot, error) {
-	u := l.Utilization
-	// A value above 1 can only be a percentage: a fraction of an
-	// allowance cannot exceed 1 by more than rounding.
-	if u > 1 {
-		u /= 100
+	pct, ok := l.percentage()
+	if !ok {
+		return Snapshot{}, fmt.Errorf("%w: bucket has no usage percentage", ErrUnavailable)
 	}
-	if u < 0 || u > 1.5 {
-		return Snapshot{}, fmt.Errorf("%w: implausible utilization %v", ErrUnavailable, l.Utilization)
+	// Allowed slightly past 100 because an overage-enabled account can
+	// report more, and rounding can nudge a full window over.
+	if pct < 0 || pct > 150 {
+		return Snapshot{}, fmt.Errorf("%w: implausible usage percentage %v", ErrUnavailable, pct)
 	}
 
 	return Snapshot{
-		SessionUtilization: u,
+		SessionUtilization: pct / 100,
 		SessionResetsAt:    parseResetsAt(l.ResetsAt),
 		At:                 at,
 	}, nil

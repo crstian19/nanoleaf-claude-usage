@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,20 +15,32 @@ import (
 	"time"
 )
 
-// TestParseUsageUtilizationScale covers the one thing about this undocumented
-// endpoint that cannot be pinned down: whether utilization arrives as a
-// percentage or a fraction. Guessing wrong would put the display out by 100x.
-func TestParseUsageUtilizationScale(t *testing.T) {
+// TestUsageIsAlwaysAPercentage pins the one convention this package depends
+// on, and the first case is a regression test for a bug that made the display
+// plainly wrong.
+//
+// The value used to be interpreted by magnitude: anything above 1 was taken
+// as a percentage, anything below as a fraction. That is right across most of
+// the range and catastrophic at the bottom of it -- a session 1% spent
+// arrives as 1.0 and was read as fully spent, so the panels went to full red
+// after a hundredth of the allowance. Claude Code's own field is named
+// used_percentage; there was nothing to infer.
+func TestUsageIsAlwaysAPercentage(t *testing.T) {
 	tests := []struct {
 		name string
 		json string
 		want float64
 	}{
-		{"percentage", `{"five_hour":{"utilization":30}}`, 0.30},
-		{"fraction", `{"five_hour":{"utilization":0.30}}`, 0.30},
+		// The regression: 1.0 means one percent, not everything.
+		{"one percent", `{"five_hour":{"utilization":1.0}}`, 0.01},
+		{"a third", `{"five_hour":{"utilization":32}}`, 0.32},
 		{"zero", `{"five_hour":{"utilization":0}}`, 0},
-		{"full as percentage", `{"five_hour":{"utilization":100}}`, 1.0},
-		{"full as fraction", `{"five_hour":{"utilization":1}}`, 1.0},
+		{"full", `{"five_hour":{"utilization":100}}`, 1.0},
+		{"fractional percent", `{"five_hour":{"utilization":0.5}}`, 0.005},
+		// Claude Code's own spelling, straight from its rate_limits block.
+		{"used_percentage", `{"five_hour":{"used_percentage":42}}`, 0.42},
+		// An overage-enabled account can report past 100.
+		{"past full", `{"five_hour":{"utilization":118}}`, 1.18},
 	}
 
 	for _, tc := range tests {
@@ -36,7 +49,7 @@ func TestParseUsageUtilizationScale(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseUsage: %v", err)
 			}
-			if got.SessionUtilization != tc.want {
+			if math.Abs(got.SessionUtilization-tc.want) > 1e-9 {
 				t.Errorf("utilization = %v, want %v", got.SessionUtilization, tc.want)
 			}
 		})
@@ -47,8 +60,9 @@ func TestParseUsageRejectsBadResponses(t *testing.T) {
 	tests := []struct{ name, json string }{
 		{"not json", `nope`},
 		{"no five_hour bucket", `{"seven_day":{"utilization":7}}`},
-		{"implausible utilization", `{"five_hour":{"utilization":9000}}`},
-		{"negative utilization", `{"five_hour":{"utilization":-5}}`},
+		{"implausible percentage", `{"five_hour":{"utilization":9000}}`},
+		{"negative percentage", `{"five_hour":{"utilization":-5}}`},
+		{"bucket with no number at all", `{"five_hour":{"resets_at":"2026-09-09T12:00:00Z"}}`},
 	}
 
 	for _, tc := range tests {
