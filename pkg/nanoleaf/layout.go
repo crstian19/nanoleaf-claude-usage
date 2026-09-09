@@ -135,12 +135,17 @@ func (c *Client) Info(ctx context.Context) (Info, error) {
 
 // State is the subset of device state we save before taking over, so the
 // device can be handed back looking the way the user left it.
-//
-// Brightness is deliberately absent: nothing here changes it, so there is
-// nothing to restore.
 type State struct {
 	// On is whether the panels were powered.
 	On bool
+	// Brightness is the device's global brightness, 0-100.
+	//
+	// It has to be owned rather than left alone, which was the original
+	// mistake here. Every colour sent over the wire is scaled by it, so a
+	// device sitting at 50 halves the whole display -- and a carefully
+	// calibrated gauge multiplied by a number set months ago in a phone
+	// app is not calibrated at all.
+	Brightness int
 	// Effect is the selected effect's name, which may be one of the
 	// device's pseudo-effects -- see Restorable.
 	Effect string
@@ -163,6 +168,9 @@ func (c *Client) State(ctx context.Context) (State, error) {
 			On struct {
 				Value bool `json:"value"`
 			} `json:"on"`
+			Brightness struct {
+				Value int `json:"value"`
+			} `json:"brightness"`
 		} `json:"state"`
 		Effects struct {
 			Select string `json:"select"`
@@ -172,8 +180,9 @@ func (c *Client) State(ctx context.Context) (State, error) {
 		return State{}, fmt.Errorf("fetch state: %w", err)
 	}
 	return State{
-		On:     out.State.On.Value,
-		Effect: out.Effects.Select,
+		On:         out.State.On.Value,
+		Brightness: out.State.Brightness.Value,
+		Effect:     out.Effects.Select,
 	}, nil
 }
 
@@ -182,6 +191,17 @@ func (c *Client) SetOn(ctx context.Context, on bool) error {
 	body := map[string]any{"on": map[string]any{"value": on}}
 	if err := c.do(ctx, http.MethodPut, c.url("/state"), body, nil); err != nil {
 		return fmt.Errorf("set power: %w", err)
+	}
+	return nil
+}
+
+// SetBrightness sets the global brightness, 0-100. Every colour sent over the
+// wire is scaled by it.
+func (c *Client) SetBrightness(ctx context.Context, pct int) error {
+	pct = min(max(pct, 0), 100)
+	body := map[string]any{"brightness": map[string]any{"value": pct}}
+	if err := c.do(ctx, http.MethodPut, c.url("/state"), body, nil); err != nil {
+		return fmt.Errorf("set brightness: %w", err)
 	}
 	return nil
 }

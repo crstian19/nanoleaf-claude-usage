@@ -26,12 +26,9 @@ const (
 
 // Input is everything a frame is computed from.
 type Input struct {
-	// Budget is the fraction of the five-hour window's ceiling already
-	// spent. It can exceed 1 on a heavy window.
+	// Budget is the fraction of the session's allowance already spent. It
+	// can exceed 1 on an account with overage enabled.
 	Budget float64
-	// Projected is where the current burn rate lands by the time the
-	// window closes, on the same scale as Budget.
-	Projected float64
 	// Phase is the current activity.
 	Phase Phase
 }
@@ -39,115 +36,26 @@ type Input struct {
 // Visual constants. Grouped here because tuning the look means touching
 // these and nothing else.
 const (
-	// dimFloor is the brightness of a band the budget has not reached yet.
+	// activeFloor is the least brightness a band shows once any of it is
+	// spent.
 	//
-	// Not zero, because the whole point of the gradient is that it IS the
-	// scale: an unreached band still shows its own colour faintly, so the
-	// shape always spells out the full green-to-red range and the bright
-	// part reads as progress along a visible ruler rather than as a lit
-	// blob in the dark.
-	dimFloor = 0.055
-
-	// overrunGlow is how brightly a band the burn rate is heading for is
-	// lit. Above dimFloor so it is clearly a warning, well below full so
-	// it cannot be mistaken for budget already spent.
-	overrunGlow = 0.32
-
-	// overrunBlink is how fast the projection warning pulses, in Hz.
-	overrunBlink = 0.5
-
-	// overrunThreshold is how far past the ceiling the projection has to
-	// point before it is worth showing. Slightly above 1 so a rate hovering
-	// exactly at the limit does not flicker the warning on and off.
-	overrunThreshold = 1.02
-
-	// overrunFloor is the warning's strength at the moment it appears, so
-	// a mild overshoot is still visible rather than fading in from nothing.
-	overrunFloor = 0.45
-
-	// overrunFullAt is how much overshoot reaches full warning strength:
-	// heading for 160% of the ceiling glows as hard as it gets.
-	overrunFullAt = 0.6
-
-	// waveDepth is how much the ambient wave dims the light it passes
-	// over, as a fraction.
-	//
-	// The wave only ever subtracts, never adds, so a fully spent band
-	// still reads as fully lit at the wave's crest -- the gauge stays
-	// exact and the motion is decoration on top of it, not a distortion
-	// of the number.
-	//
-	// waveSigma is the highlight's width along the long axis.
-	//
-	// Narrow on purpose, and this is the whole design. A wave shaped like
-	// a sine modulates every panel at every instant, and since a bright
-	// highlight has to lose most of its chroma to stay in gamut, that left
-	// the entire shape permanently washed out -- a pale green and a pale
-	// red are hard to tell apart, which destroyed the one thing the
-	// gradient is for. A narrow travelling highlight leaves most bands at
-	// their exact colour and only touches two or three at a time.
-	waveSigma = 0.15
-
-	// waveGlow is the absolute amount of light the highlight adds, on the
-	// same scale as the gauge's own brightness.
-	//
-	// Absolute, not proportional, and that is the whole point. Scaling the
-	// highlight by the band's fill meant it vanished exactly when the
-	// gauge was empty: at 1% spent, eight of nine bands sit at the dim
-	// floor, so a proportional highlight was multiplied by 0.055 and the
-	// wall showed a flat dim mush with nothing travelling across it.
-	//
-	// The size is set by the one constraint that matters: an unspent band
-	// with the highlight on it must stay clearly darker than a spent band
-	// without it, since both are on the wall at once. Measured in the
-	// bytes that actually reach the panels, this leaves the dimmest spent
-	// band 1.85x the brightest unspent one while still moving an unspent
-	// band by 1.6x -- enough to see it travel.
-	//
-	// The comparison has to be made across bands and in bytes, not within
-	// one band in linear light. The ramp's bands do not all emit the same
-	// amount (341 to 456 in byte terms), and gamma makes the linear
-	// numbers these constants are written in badly misleading: 0.12 looked
-	// safe linearly and brought a highlighted empty band within 2% of a
-	// spent one on the wall.
-	waveGlow = 0.04
-
-	// waveLift is how much brighter the highlight makes a band, and
-	// waveSaturate how far it pushes the band's chroma towards the most
-	// the gamut allows at that brightness. See Color.Highlight.
-	//
-	// The lift is deliberately small. Light and chroma trade against each
-	// other, so a strong lift forces a colour towards white -- which is
-	// exactly the fault this replaces: at 0.20 with a fixed 60% chroma
-	// drain, a green band went to (188,222,179) and a red one to
-	// (251,195,180), near enough alike to defeat the gradient. Spending
-	// the headroom on chroma instead more than doubles the green's chroma
-	// and leaves the red at two thirds of its own -- and both ends of the
-	// scale move visibly, which neither did before.
-	//
-	// Brightening cannot make an unspent band look spent: the highlight is
-	// applied to the band's colour and the gauge's brightness afterwards,
-	// so both are lifted by the same factor and their ratio is untouched.
-	waveLift     = 0.12
-	waveSaturate = 0.70
-
-	// wavePeriod is how long the highlight takes to cross the whole shape.
-	wavePeriod = 4 * time.Second
+	// Without it the lowest band fades in from nothing, so the first few
+	// percent of a session are invisible: at 2% spent the only lit panel
+	// would sit at 18% of its colour, which on a diffused panel is nothing
+	// at all. With a floor, anything spent is unmistakably lit and the
+	// fill still modulates on top -- the resolution is compressed into the
+	// remaining range rather than lost.
+	activeFloor = 0.35
 )
 
 // The budget ramp, as an arc of constant perceived lightness in OKLCH.
 //
-// Only the hue changes along it, sweeping green to red. That is a correction
-// of a real fault: the hand-picked sRGB ramp this replaces varied in measured
-// lightness from 0.674 at the red end to 0.843 in the middle, and worse, it
-// was not even monotonic -- the ambers were the brightest thing on the wall.
-// Two consequences, both reported from across the room before being measured:
-// the gradient did not read as an even scale, and the ambient wave appeared
-// to vanish on the brighter bands, because taking 35% of the light off
-// something already glaring is far less noticeable.
-//
-// With lightness fixed, the wave lands identically on every band and the
-// gradient reads as pure hue.
+// Only the hue changes along it, sweeping green to red. That corrects a real
+// fault in the hand-picked sRGB ramp it replaces, which varied in measured
+// lightness from 0.674 at the red end to 0.843 in the middle -- and was not
+// even monotonic, so the ambers were the brightest thing on the wall. The
+// gradient did not read as an even scale, which was noticed from across the
+// room before it was measured.
 //
 // The price is that the top of the scale is a warm coral rather than a deep
 // red: a true deep red simply has a low lightness, so it cannot appear on a
@@ -212,18 +120,7 @@ func (s *Scene) Frame(in Input, t time.Duration) nanoleaf.Frame {
 
 	level := clamp01(in.Budget)
 
-	// The projection warning only earns space once the burn rate actually
-	// points past the ceiling: heading for 90% is not news.
-	//
-	// Past that point every remaining band is going to be spent, so the
-	// warning covers all of them and the projection's magnitude sets how
-	// hard it glows instead of how far it reaches. A mild overshoot is
-	// still visible; a violent one is unmistakable.
-	showOverrun := in.Projected > overrunThreshold
-	severity := overrunFloor + (1-overrunFloor)*clamp01((in.Projected-1)/overrunFullAt)
-
 	rainbow := rainbowSpeed(in.Phase)
-	blink := 0.5 + 0.5*math.Sin(2*math.Pi*overrunBlink*secs)
 
 	frame := make(nanoleaf.Frame, n)
 	for _, p := range s.geo.Points {
@@ -238,13 +135,28 @@ func (s *Scene) Frame(in Input, t time.Duration) nanoleaf.Frame {
 			col = rainbowAt(p.S, secs, rainbow)
 		}
 
-		brightness := dimFloor + (1-dimFloor)*band.coveredBy(level)
-
-		// A band the current rate is heading for glows without being
-		// mistaken for budget already spent.
-		if showOverrun {
-			ahead := 1 - band.coveredBy(level)
-			brightness += overrunGlow * blink * severity * ahead
+		// While the rainbow turns, every panel is lit. The signal is
+		// the whole shape, and a rainbow drawn on two of nine panels
+		// is not one. The level is unreadable for as long as Claude
+		// works, which is the trade: the gauge is what the display
+		// shows when there is nothing else to say.
+		brightness := 1.0
+		if rainbow == 0 {
+			// Brightness is the spend and nothing else: an unspent
+			// band is off. A floor under the unspent ones, to keep
+			// the whole scale faintly visible, sounded reasonable
+			// and did not survive the wall. At a few percent spent,
+			// eight of nine panels glowing at a quarter brightness
+			// read as a uniform dim field with no level in it, and
+			// competed with the one band that mattered.
+			//
+			// A band with anything in it starts at activeFloor, so
+			// the start of a session is visible rather than fading
+			// in from black.
+			brightness = 0
+			if fill := band.coveredBy(level); fill > 0 {
+				brightness = activeFloor + (1-activeFloor)*fill
+			}
 		}
 
 		// The ambient wave says one thing only: the display is alive.
@@ -256,16 +168,7 @@ func (s *Scene) Frame(in Input, t time.Duration) nanoleaf.Frame {
 		// Applied to the band's colour with the gauge's brightness
 		// after it, so a spent band and an unspent one under the same
 		// part of the highlight keep their ratio exactly.
-		if rainbow == 0 {
-			// The gauge first, then the highlight added on top of
-			// it. Applying the highlight to the colour and scaling
-			// afterwards is what made it disappear on an empty
-			// gauge -- see waveGlow.
-			g := waveAt(p.S, secs)
-			col = col.Highlight(g).Scale(brightness + waveGlow*g)
-		} else {
-			col = col.Scale(brightness)
-		}
+		col = col.Scale(brightness)
 
 		if in.Phase == PhaseError {
 			flash := 0.5 + 0.5*math.Sin(2*math.Pi*2*secs)
@@ -344,26 +247,4 @@ func rainbowSpeed(ph Phase) time.Duration {
 func rainbowAt(s, secs float64, period time.Duration) Color {
 	h := 2 * math.Pi * (s*rainbowTurns - secs/period.Seconds())
 	return oklabPolar(rainbowL, maxChromaFor(h), h).color()
-}
-
-// waveAt is how strongly the travelling highlight falls on a point of the
-// shape's long axis, in [0,1].
-//
-// Zero away from the highlight, so the band shows its true colour -- which is
-// what keeps green and red tellable apart. An earlier version modulated every
-// panel continuously and left the whole shape pale.
-func waveAt(s, secs float64) float64 {
-	// The highlight travels the axis and wraps around.
-	pos := math.Mod(secs/wavePeriod.Seconds(), 1)
-	d := s - pos
-	// Shortest way round, so the highlight re-enters one end as it leaves
-	// the other instead of jumping back.
-	switch {
-	case d > 0.5:
-		d--
-	case d < -0.5:
-		d++
-	}
-
-	return math.Exp(-(d * d) / (2 * waveSigma * waveSigma))
 }

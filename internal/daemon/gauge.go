@@ -80,10 +80,9 @@ func (g *gauge) stale(now time.Time) bool {
 	return !g.resetsAt.IsZero() && now.After(g.resetsAt)
 }
 
-// reading is a level plus where it came from.
+// gaugeReading is a level plus where it came from.
 type gaugeReading struct {
-	Used      float64
-	Projected float64
+	Used float64
 	// Exact is true when the level rests on a real reading rather than on
 	// a historical guess. Only used for logging: the display looks the
 	// same either way, and claiming otherwise in a log is how a fallback
@@ -102,11 +101,7 @@ func (g *gauge) level(w usage.Window, haveWindow bool, now time.Time) gaugeReadi
 		// against, so show the real reading unmoved and wait for the
 		// next anchor to establish one.
 		if !g.haveBaseline {
-			return gaugeReading{
-				Used:      g.anchorUtil,
-				Projected: g.project(g.anchorUtil, w, g.resetsAt, now),
-				Exact:     true,
-			}
+			return gaugeReading{Used: g.anchorUtil, Exact: true}
 		}
 
 		// Only the movement since the anchor is taken from local cost,
@@ -117,30 +112,8 @@ func (g *gauge) level(w usage.Window, haveWindow bool, now time.Time) gaugeReadi
 		if delta < 0 {
 			delta = 0
 		}
-		used := g.anchorUtil + delta/g.costCeiling
-		return gaugeReading{
-			Used:      used,
-			Projected: g.project(used, w, g.resetsAt, now),
-			Exact:     true,
-		}
+		return gaugeReading{Used: g.anchorUtil + delta/g.costCeiling, Exact: true}
 	}
 
-	used := w.CostUSD / g.costCeiling
-	return gaugeReading{
-		Used:      used,
-		Projected: g.project(used, w, w.EndTime, now),
-		Exact:     false,
-	}
-}
-
-// project extrapolates the current burn rate to the end of the window.
-func (g *gauge) project(used float64, w usage.Window, end, now time.Time) float64 {
-	if end.IsZero() || g.costCeiling <= 0 || w.CostPerHour <= 0 {
-		return 0
-	}
-	hours := end.Sub(now).Hours()
-	if hours <= 0 {
-		return used
-	}
-	return used + w.CostPerHour*hours/g.costCeiling
+	return gaugeReading{Used: w.CostUSD / g.costCeiling, Exact: false}
 }

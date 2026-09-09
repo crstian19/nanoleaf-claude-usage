@@ -46,27 +46,6 @@ func (c Color) Lerp(o Color, t float64) Color {
 	return c.oklab().lerp(o.oklab(), t).color()
 }
 
-// Fade dims and desaturates towards a paler, darker version of the same hue.
-//
-// Both factors are in [0,1], where 1 leaves that aspect untouched. The two
-// are separate because a pure dimming is surprisingly easy to miss on the
-// colours the eye is most sensitive to: measured across the budget ramp, an
-// identical loss of lightness moved a green band by 283 byte-steps and a red
-// one by 212, yet the green read as barely changing. Draining some chroma as
-// well is what makes the effect land evenly on every hue.
-//
-// It also has a mechanical benefit. Desaturating moves the three channels by
-// different amounts, so the 8-bit output takes far more distinct values than
-// a pure scale does -- which is what lets a slow animation stay smooth
-// instead of stepping.
-func (c Color) Fade(lightness, chroma float64) Color {
-	o := c.oklab()
-	o.L *= lightness
-	o.A *= chroma
-	o.B *= chroma
-	return o.color()
-}
-
 // RGB converts back to the 8-bit sRGB triple the panels expect.
 func (c Color) RGB() nanoleaf.RGB {
 	return nanoleaf.RGB{

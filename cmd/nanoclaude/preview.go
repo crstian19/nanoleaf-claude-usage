@@ -15,7 +15,6 @@ import (
 func newPreviewCmd() *cobra.Command {
 	var (
 		budget    float64
-		projected float64
 		phaseName string
 		animate   time.Duration
 		fps       int
@@ -46,12 +45,11 @@ func newPreviewCmd() *cobra.Command {
 				return err
 			}
 			scene := render.NewScene(geo)
-			in := render.Input{Budget: budget, Projected: projected, Phase: ph}
+			in := render.Input{Budget: budget, Phase: ph}
 
 			o := newOut(cmd.OutOrStdout())
 			if animate <= 0 {
-				o.printf("%s | budget %.0f%% | projected %.0f%% | %s\n\n",
-					source, budget*100, projected*100, phaseName)
+				o.printf("%s | budget %.0f%% | %s\n\n", source, budget*100, phaseName)
 				o.print(drawShape(geo, scene.Frame(in, 0)))
 				return o.Err()
 			}
@@ -71,8 +69,8 @@ func newPreviewCmd() *cobra.Command {
 				}
 				elapsed := time.Since(start)
 				o.print("\x1b[H")
-				o.printf("%s | budget %.0f%% | projected %.0f%% | %s | %.1fs\n\n",
-					source, budget*100, projected*100, phaseName, elapsed.Seconds())
+				o.printf("%s | budget %.0f%% | %s | %.1fs\n\n",
+					source, budget*100, phaseName, elapsed.Seconds())
 				o.print(drawShape(geo, scene.Frame(in, elapsed)))
 				if err := o.Err(); err != nil {
 					return err
@@ -84,7 +82,6 @@ func newPreviewCmd() *cobra.Command {
 	}
 
 	cmd.Flags().Float64Var(&budget, "budget", 0.6, "fraction of the window's ceiling used")
-	cmd.Flags().Float64Var(&projected, "projected", 0, "projected fraction by window close")
 	cmd.Flags().StringVar(&phaseName, "phase", "idle", "activity: idle, thinking, tool or error")
 	cmd.Flags().DurationVar(&animate, "animate", 0, "animate for this long instead of drawing one frame")
 	cmd.Flags().IntVar(&fps, "fps", 20, "animation frame rate")

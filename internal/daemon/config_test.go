@@ -68,6 +68,22 @@ func TestConfigFromEnv(t *testing.T) {
 			},
 		},
 		{
+			name: "brightness out of range is rejected",
+			env: map[string]string{
+				EnvNanoleafHost: "10.0.0.5", EnvNanoleafToken: "tok", EnvBrightness: "0",
+			},
+			wantErr: true,
+		},
+		{
+			name: "brightness defaults to full",
+			env:  map[string]string{EnvNanoleafHost: "10.0.0.5", EnvNanoleafToken: "tok"},
+			check: func(t *testing.T, c Config) {
+				if c.Brightness != DefaultBrightness {
+					t.Errorf("brightness = %d, want %d", c.Brightness, DefaultBrightness)
+				}
+			},
+		},
+		{
 			name: "fps out of range is rejected",
 			env: map[string]string{
 				EnvNanoleafHost: "10.0.0.5", EnvNanoleafToken: "tok", EnvFPS: "0",
@@ -177,7 +193,7 @@ func TestConfigFromEnv(t *testing.T) {
 				EnvNanoleafHost, EnvNanoleafToken, EnvHassServer,
 				EnvHassToken, EnvToggleEntity, EnvCeilingCost, EnvFPS,
 				EnvRotation, EnvLimits, EnvLimitsEvery, EnvLimitsCache,
-				EnvIdleExit,
+				EnvIdleExit, EnvBrightness,
 			} {
 				t.Setenv(k, "")
 			}

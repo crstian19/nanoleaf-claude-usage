@@ -145,37 +145,6 @@ func TestGaugeRejectsNoisyAnchor(t *testing.T) {
 	}
 }
 
-// TestGaugeProjection checks the burn rate is extrapolated to the window's
-// end, since that is what triggers the overrun warning on the wall.
-func TestGaugeProjection(t *testing.T) {
-	var g gauge
-	now := time.Now()
-	g.anchor(limits.Snapshot{
-		SessionUtilization: 0.50,
-		SessionResetsAt:    now.Add(2 * time.Hour),
-	}, 100) // implies a 200-dollar ceiling
-
-	// 50 dollars an hour for two more hours is another 100 dollars, i.e.
-	// the whole remaining allowance: heading for exactly 100%.
-	w := usage.Window{CostUSD: 100, CostPerHour: 50}
-	got := g.level(w, true, now)
-
-	if math.Abs(got.Projected-1.0) > 1e-6 {
-		t.Errorf("projected = %v, want 1.0", got.Projected)
-	}
-}
-
-// TestGaugeProjectionWithoutData checks a missing burn rate or reset time
-// yields no projection rather than a fabricated one.
-func TestGaugeProjectionWithoutData(t *testing.T) {
-	var g gauge
-	g.setFallbackCeiling(100)
-
-	if got := g.level(usage.Window{CostUSD: 50}, true, time.Now()); got.Projected != 0 {
-		t.Errorf("projected = %v with no burn rate or window end, want 0", got.Projected)
-	}
-}
-
 // TestGaugeAnchorWithoutCostBaseline covers a startup race that is easy to
 // miss and very visible: the usage cache is read immediately while ccusage
 // takes a moment, so the first anchor can arrive with no local cost known.

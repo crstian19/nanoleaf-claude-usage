@@ -1,157 +1,226 @@
-# nanoclaude
+<p align="center">
+  <img src="assets/logo.png" alt="nanoleaf-claude-usage" width="200">
+</p>
 
-Shows Claude Code usage on Nanoleaf panels.
+<h1 align="center">nanoleaf-claude-usage</h1>
 
-The five-hour billing window fills the panels from the bottom up like a
-liquid level, coloured green through red as it fills. While Claude is working,
-a pulse of light travels along the arrangement. A Home Assistant toggle arms
-and disarms the display, handing the panels back as ordinary lights when it is
-off.
+[![Go Reference](https://pkg.go.dev/badge/github.com/crstian19/nanoleaf-claude-usage.svg)](https://pkg.go.dev/github.com/crstian19/nanoleaf-claude-usage)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/crstian19/nanoleaf-claude-usage)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Why it renders geometrically
+Show how much of your Claude Code session you have used, on a wall of Nanoleaf
+panels.
 
-The panels are not treated as N cells lit up in order. Nanoleaf reports each
-panel's physical position, and a scene is a **field evaluated at those
-positions** — so the picture follows however the panels are actually mounted
-on the wall:
+The panels work as a gauge. Each panel owns an equal share of the session
+allowance. A panel lights up when you spend its share. Its color tells you where it
+sits on the scale, from green at the bottom to coral at the top. You read the
+display by counting the lit panels. While Claude works, the whole
+shape turns into a rainbow that sweeps across it.
 
-- The **fill level** is a function of height, so it genuinely rises through
-  the shape rather than switching panels on in device order.
-- The **activity pulse** travels along the shape's long axis, found by
-  principal component analysis over the panel centroids. On a diagonal
-  arrangement it runs along the diagonal; nothing is hardcoded.
-
-`nanoclaude layout` prints the detected shape so you can confirm it matches
-the wall.
+The display fits the shape you mounted your panels in. It does not assume a
+row or a grid.
 
 ## Install
 
 ```sh
-just install                      # builds and installs to ~/.local/bin
+just install
+```
 
-# Pair with the panels: hold the controller's power button 5-7s until the
-# LEDs flash. Panels hold several tokens, so this does not revoke Home
-# Assistant's access.
+This builds the binary and copies it to `~/.local/bin`.
+
+Next, pair with the panels. Hold the power button on the controller for 5 to 7
+seconds, until the LEDs flash. Then run:
+
+```sh
 nanoclaude pair --host 192.168.1.50
+```
 
+The panels hold several tokens at once, so this does not revoke access for
+Home Assistant or for the Nanoleaf app.
+
+Now write the configuration file:
+
+```sh
 mkdir -p ~/.config/nanoclaude
 cp deploy/env.example ~/.config/nanoclaude/env
 chmod 600 ~/.config/nanoclaude/env
-$EDITOR ~/.config/nanoclaude/env   # paste the token
-
-# Confirm the shape is the right way up: green must be at the bottom.
-nanoclaude calibrate
-
-# Let Claude Code start it.
-python3 deploy/install-hooks.py --dry-run   # inspect first
-python3 deploy/install-hooks.py             # backs up before writing
+$EDITOR ~/.config/nanoclaude/env
 ```
 
-There is no service to install and nothing to add to a startup file. The
-hooks do two jobs: they report what Claude is doing, and they bring the
-display up. `SessionStart` starts it, every other hook revives it, and the
-daemon stands down by itself after 20 minutes with no live session — so it
-exists exactly while Claude Code does.
+Make sure that the shape is the right way up. This lights the bottom of the
+shape green and the top red:
 
-Because it is started by a hook, the daemon reads its own settings from
-`~/.config/nanoclaude/env` rather than relying on the launcher's environment.
+```sh
+nanoclaude calibrate
+```
 
-### Running it another way
+If green is not at the bottom, set `NANOCLAUDE_ROTATION` to the difference in
+degrees and run it again.
 
-Nothing about the daemon requires the hooks. `deploy/nanoclaude.service` runs
-it under systemd instead, which adds restart-on-failure and a sandbox
-(`ProtectSystem=strict`, `ProtectHome=read-only`, `MemoryMax`); set
-`NANOCLAUDE_IDLE_EXIT=0` so it stays up. A line in a compositor's startup
-file works too. Without the hooks the display still shows the budget
-gradient, just never the activity pulse.
+Last, let Claude Code start the display for you:
 
-## Commands
+```sh
+python3 deploy/install-hooks.py --dry-run
+python3 deploy/install-hooks.py
+```
+
+The script appends to `~/.claude/settings.json`. It keeps every hook that is
+already there, and it writes a backup first.
+
+## Usage
+
+There is no service to enable and nothing to add to a startup file. Claude
+Code starts the display. The `SessionStart` hook starts it. Every other hook brings it
+back if it stopped. It shuts itself down after 20 minutes with no live
+session.
+
+You can also control it by hand:
 
 | Command | What it does |
 |---|---|
-| `nanoclaude up` | Start it in the background, unless already running. |
-| `nanoclaude down` | Stop it and hand the panels back. |
-| `nanoclaude status` | Whether it is running, and where its config and log live. |
-| `nanoclaude run` | The daemon in the foreground. Restores the panels on exit. |
-| `nanoclaude calibrate` | Light the panels to confirm which way the shape is mounted. |
-| `nanoclaude pair --host <ip>` | Gets an API token from panels in pairing mode. |
-| `nanoclaude layout` | Prints the panel arrangement and its scene coordinates. |
-| `nanoclaude preview` | Draws a scene in the terminal, without touching the panels. |
-| `nanoclaude hook` | Records a hook event. Called from `settings.json`, not by hand. |
+| `nanoclaude up` | Start it in the background, if it does not run already |
+| `nanoclaude down` | Stop it and give the panels back |
+| `nanoclaude status` | Report whether it runs, and where the log is |
+| `nanoclaude run` | Run it in the foreground |
+| `nanoclaude calibrate` | Light the panels to make sure that the shape is the right way up |
+| `nanoclaude layout` | Print the panel positions and the scene coordinates |
+| `nanoclaude preview` | Draw a scene in the terminal, without touching the panels |
+| `nanoclaude pair` | Get an API token from panels in pairing mode |
 
-`preview` works without a device, using a stand-in shape — useful for tuning
-the look:
+`nanoclaude preview` runs without a device. It falls back to a stand-in shape
+of nine panels, which is useful to adjust the look:
 
 ```sh
 nanoclaude preview --budget 0.85 --phase tool --animate 8s
 ```
 
+The daemon gives the panels back when it stops. It restores the effect, the
+brightness, and the power state that it found.
+
 ## Configuration
 
-All via the environment; see `deploy/env.example`. Secrets are read from the
-environment rather than flags so they never appear in `ps` output.
+The daemon reads its own configuration file at `~/.config/nanoclaude/env`. It
+does this because a Claude Code hook starts it, and that hook knows nothing
+about panels or tokens. See `deploy/env.example`.
 
-| Variable | Meaning |
+| Variable | What it sets |
 |---|---|
-| `NANOCLAUDE_NANOLEAF_HOST` | Panel controller address. Required. |
+| `NANOCLAUDE_NANOLEAF_HOST` | Address of the panel controller. Required. |
 | `NANOCLAUDE_NANOLEAF_TOKEN` | Token from `nanoclaude pair`. Required. |
 | `HASS_SERVER`, `HASS_TOKEN` | Home Assistant, to gate the display. Both or neither. |
-| `NANOCLAUDE_TOGGLE_ENTITY` | Toggle entity. Default `input_boolean.claude_display`. |
-| `NANOCLAUDE_LIMITS` | `cache` (default), `api`, or `off`. See below. |
-| `NANOCLAUDE_LIMITS_CACHE` | Status line cache to read in `cache` mode. |
-| `NANOCLAUDE_LIMITS_EVERY` | Poll interval in `api` mode. Floor 5m, default 15m. |
-| `NANOCLAUDE_CEILING_COST` | What a full session costs, in dollars. Unset works it out. |
+| `NANOCLAUDE_TOGGLE_ENTITY` | The switch that arms the display. |
+| `NANOCLAUDE_LIMITS` | Source of the usage figure: `cache`, `api`, or `off`. |
+| `NANOCLAUDE_LIMITS_CACHE` | Path of the status line cache, for `cache` mode. |
+| `NANOCLAUDE_CEILING_COST` | Cost of a full session, in dollars. |
 | `NANOCLAUDE_ROTATION` | Extra rotation in degrees. See `nanoclaude calibrate`. |
-| `NANOCLAUDE_IDLE_EXIT` | Stand down after this long with no session. `0` never. Default 20m. |
-| `NANOCLAUDE_FPS` | Frame rate, 1-60. Default 20. |
+| `NANOCLAUDE_BRIGHTNESS` | Device brightness while the display owns it. |
+| `NANOCLAUDE_IDLE_EXIT` | Time with no session before it shuts down. `0` never. |
+| `NANOCLAUDE_FPS` | Frame rate, from 1 to 60. |
+
+Secrets come from the file and from the environment, never from a flag, so
+they stay out of the output of `ps`.
+
+### Home Assistant
+
+The display can wait for a switch in Home Assistant. Create an
+`input_boolean` helper and name it in `NANOCLAUDE_TOGGLE_ENTITY`. The daemon
+only reads that switch. It never calls a service, so a fault here cannot
+change anything else in your house.
+
+Use an `https` address for `HASS_SERVER`. A Home Assistant long-lived token
+has full access to the instance and it never expires. The daemon sends it on
+every poll, so plain `http` puts it on the network thousands of times a day.
+The daemon prints a warning at startup if the address is plain `http`.
+
+## How it works
 
 ### Where the number comes from
 
-Two sources, because neither is sufficient alone.
+Claude Code knows the real figure. Its `/usage` screen reads an endpoint that
+reports the percentage of the session you have spent, and the time the session
+resets.
 
-**The real one.** Claude Code's `/usage` screen reads `/api/oauth/usage`.
-That gives the actual session utilization and reset time — the number that
-matters.
+By default this program does not call that endpoint. A status line already
+polls it every 60 seconds.
+[claude-pulse](https://github.com/NoobyGains/claude-pulse) writes the answer to
+`~/.cache/claude-status/cache.json`, and reading that file costs nothing. It
+needs no credentials, and it cannot get the account rate limited. The endpoint
+limits requests hard. Two requests in quick succession earned a 26 minute
+`Retry-After` during development.
 
-By default this does **not** query it. A status line is already polling it
-every 60 seconds: [claude-pulse](https://github.com/NoobyGains/claude-pulse)
-leaves the answer in `~/.cache/claude-status/cache.json`, and reading that
-file costs nothing, needs no credentials, and cannot get the account rate
-limited. That last point is not hypothetical — probing the endpoint directly
-while pulse was also polling it earned a 26-minute `Retry-After` during
-development.
+Set `NANOCLAUDE_LIMITS=api` to call the endpoint directly, for a machine with
+no status line to read from. Set `NANOCLAUDE_LIMITS=off` to keep every request
+on your own network.
 
-`NANOCLAUDE_LIMITS=api` queries it directly instead, for a machine with no
-status line to borrow from. There the endpoint sets the pace: at most every 15
-minutes, its `Retry-After` always wins, and any other failure backs off
-geometrically.
+A real reading also works as an anchor. Between readings, the daemon adds the
+cost that `ccusage` reports from the local transcripts. That cost is a
+fallback, not the main source: the token count is about 98 percent cache
+reads, which are the cheapest tokens there are, so it mostly measures the
+length of the conversation. The anchor also teaches the daemon what a full
+session costs on your plan, which a fallback cannot work out on its own.
 
-**The local one.** `ccusage` reads the transcripts in `~/.claude/projects/`
-and reports what the current five-hour block cost. That can be read
-constantly but has no idea what the account's allowance is.
+### Why the display fits your shape
 
-So a real reading becomes an *anchor*, and local cost carries the level
-forward between anchors. The anchor also calibrates the fallback: it reveals
-what a full session actually costs on this account — including a temporary
-limit boost, which history could never account for — so if the endpoint stops
-working, the estimate that takes over is one the real data taught it.
+The device reports the position of every panel on the wall. The gauge fills
+from the bottom of that shape, and the rainbow sweeps along the shape's long
+axis. The program finds that axis with principal component analysis, a method
+that finds the direction the positions vary in most. Nothing in the code
+assumes a panel order or a panel count.
 
-Note that **cost**, not token count, is the local proxy. `ccusage`'s
-`totalTokens` weights every token type equally, and about 98% of it is cache
-reads — the cheapest thing there is. That number mostly measures how long the
-conversation has got, not how much allowance is gone.
+The device also reports a global orientation, because panel coordinates come
+from the arrangement you built in the Nanoleaf app. That app does not know
+which way is up on your wall. The program undoes that orientation. It does not
+apply it again. On a real device at 302 degrees, the wrong sign put the
+vertical axis 116 degrees out, and the gauge climbed diagonally.
+
+### Colors
+
+Both color scales are arcs in OKLCH, a color space where equal numbers look
+equally bright.
+
+The gauge holds lightness and chroma constant and moves only the hue. A scale
+must be even, because a band that looked brighter would read as more urgent.
+The cost is that the top of the scale is a warm coral and not a deep red. A
+deep red has a low lightness, so it cannot appear on an arc of constant
+lightness.
+
+The rainbow holds lightness constant and takes as much chroma as each hue can
+carry. A signal only has to be unmistakable, so any saturation left unused is
+waste. One chroma for the whole hue circle has to fit the most limited hue,
+which is about 0.13 here. The greens carry 0.48. The program measures the
+gamut boundary for each hue at startup instead.
+
+### Lifetime
+
+A Claude Code hook starts the daemon, and the daemon holds a lock so that
+three sessions do not start three daemons. The lock is a file lock, which the
+kernel releases however the process dies. A stale process id file would block
+every later start.
+
+Every hook brings the daemon back, not only `SessionStart`. Without that, the
+idle shutdown would be a trap. A session that stays open long enough for its
+state file to expire never fires `SessionStart` again.
 
 ## Development
 
 ```sh
-just            # list recipes
-just ci         # lint, test, vulnerability scan
-just layout     # what shape does it think the panels are in
+just            # list the recipes
+just ci         # lint, race tests, vulnerability scan
+just layout     # print the shape the program detected
 just preview    # animate a scene in the terminal
 just logs       # follow the daemon
 ```
 
-`just logs` follows the systemd journal. Started by a hook, the log is a file:
-`nanoclaude status` prints the path.
-
 Requires `ccusage` on `PATH`.
+
+`deploy/nanoclaude.service` runs the daemon under systemd instead of under a
+hook. Systemd adds a restart on failure and a sandbox. Set
+`NANOCLAUDE_IDLE_EXIT=0` there, so the daemon stays up.
+
+Read `docs/architecture.md` before you change the rendering or the wire
+protocol. It records the faults behind the current design, and several of them
+looked correct until a measurement showed otherwise.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
