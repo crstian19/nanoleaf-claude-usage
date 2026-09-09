@@ -52,6 +52,10 @@ func TestEverySampleLooksLikeADevice(t *testing.T) {
 
 // TestNoTwoPanelsShareAPlace catches a tiling built with the wrong step,
 // which would otherwise draw panels on top of each other.
+// smallestSide is the shortest edge length in Nanoleaf's range, which is the
+// connector pieces at 11.
+const smallestSide = 11.0
+
 func TestNoTwoPanelsShareAPlace(t *testing.T) {
 	for _, s := range All() {
 		t.Run(s.Name, func(t *testing.T) {
@@ -60,12 +64,13 @@ func TestNoTwoPanelsShareAPlace(t *testing.T) {
 				for j := i + 1; j < len(panels); j++ {
 					dx := float64(panels[i].X - panels[j].X)
 					dy := float64(panels[i].Y - panels[j].Y)
-					// A third of the smallest panel any sample
-					// uses. The threshold is not taken from
-					// the layout's own side length because a
-					// mixed set holds two sizes, and this test
-					// must not re-implement which is which.
-					if gap := math.Hypot(dx, dy); gap < float64(miniSide)/3 {
+					// A third of the smallest panel any
+					// sample uses, which is a Lines
+					// connector at 11. Not taken from the
+					// layout's own side length: a wall can
+					// hold two sizes, and this test must
+					// not re-implement which is which.
+					if gap := math.Hypot(dx, dy); gap < smallestSide/3 {
 						t.Errorf("panels %d and %d are %.1f apart", panels[i].ID, panels[j].ID, gap)
 					}
 				}

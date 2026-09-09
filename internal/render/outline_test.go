@@ -22,7 +22,9 @@ func TestPolygonOfKnowsTheProducts(t *testing.T) {
 		{"light panel", nanoleaf.ShapeLightPanel, 3, 90},
 		{"square", nanoleaf.ShapeSquare, 4, 45},
 		{"square with the controller", nanoleaf.ShapeSquareMaster, 4, 45},
-		{"hexagon", nanoleaf.ShapeHexagon, 6, 30},
+		{"hexagon", nanoleaf.ShapeHexagon, 6, 0},
+		{"elements hexagon", nanoleaf.ShapeElementsHexagon, 6, 0},
+		{"skylight panel", nanoleaf.ShapeSkylight, 4, 45},
 		{"something this version does not know", 200, unknownSides, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -126,8 +128,8 @@ func TestHexBaseIsInferredFromTheNeighbour(t *testing.T) {
 		toward   float64 // direction of the neighbour, degrees
 		wantBase float64
 	}{
-		{"neighbour to the right means a corner at the top", 0, 30},
-		{"neighbour up and to the right means a corner to the right", 30, 60},
+		{"neighbour to the right means a corner 30 degrees round", 0, 30},
+		{"neighbour up and to the right means a corner at 60", 30, 60},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rad := radians(tc.toward)
@@ -164,29 +166,105 @@ func TestALoneHexagonKeepsTheFallbackAngle(t *testing.T) {
 	}
 }
 
-// TestMiniTrianglesAreHalvedOnlyInAMixedSet pins the one guess in the
-// drawing: a device reports a single side length, and a set holding both
-// sizes of triangle has two.
-func TestMiniTrianglesAreHalvedOnlyInAMixedSet(t *testing.T) {
-	mini := nanoleaf.Panel{ID: 2, X: 200, Y: 0, ShapeType: nanoleaf.ShapeMiniTriangle}
-
-	mixed := NewOutliner(Project(nanoleaf.Layout{
+// TestTheSideLengthComesFromTheShape is the rule Nanoleaf's own
+// documentation states: the sideLength a device reports is deprecated as of
+// firmware 5.0.0, because one number cannot describe a wall holding two
+// sizes. A Shapes triangle is 134 and a hexagon 67, and both can be on the
+// same wall.
+func TestTheSideLengthComesFromTheShape(t *testing.T) {
+	// A layout that reports a length for triangles, holding both sizes and
+	// a hexagon.
+	wall := Project(nanoleaf.Layout{
 		SideLength: 134,
-		Panels:     []nanoleaf.Panel{{ID: 1, ShapeType: nanoleaf.ShapeTriangle}, mini},
-	}, 0))
-	if got := mixed.Side(nanoleaf.ShapeMiniTriangle); got != 67 {
-		t.Errorf("mixed set draws a mini triangle with side %v, want 67", got)
-	}
-	if got := mixed.Side(nanoleaf.ShapeTriangle); got != 134 {
-		t.Errorf("mixed set draws a full triangle with side %v, want 134", got)
+		Panels: []nanoleaf.Panel{
+			{ID: 1, ShapeType: nanoleaf.ShapeTriangle},
+			{ID: 2, X: 300, ShapeType: nanoleaf.ShapeMiniTriangle},
+			{ID: 3, X: 600, ShapeType: nanoleaf.ShapeHexagon},
+			{ID: 4, X: 900, ShapeType: 200},
+		},
+	}, 0)
+	outliner := NewOutliner(wall)
+
+	for _, tc := range []struct {
+		shapeType int
+		want      float64
+	}{
+		{nanoleaf.ShapeTriangle, 134},
+		{nanoleaf.ShapeMiniTriangle, 67},
+		{nanoleaf.ShapeHexagon, 67},
+		{nanoleaf.ShapeElementsHexagon, 134},
+		{nanoleaf.ShapeSkylight, 180},
+		{nanoleaf.ShapeLightPanel, 150},
+		{nanoleaf.ShapeSquare, 100},
+		{nanoleaf.ShapeLines, 154},
+		// Nothing is published for a shape this version does not know,
+		// so the layout's own number is all there is.
+		{200, 134},
+	} {
+		if got := outliner.Side(tc.shapeType); got != tc.want {
+			t.Errorf("%s is drawn with side %v, want %v",
+				nanoleaf.ShapeName(tc.shapeType), got, tc.want)
+		}
 	}
 
-	only := NewOutliner(Project(nanoleaf.Layout{
-		SideLength: 67,
-		Panels:     []nanoleaf.Panel{mini},
-	}, 0))
-	if got := only.Side(nanoleaf.ShapeMiniTriangle); got != 67 {
-		t.Errorf("mini-only set draws a mini triangle with side %v, want the reported 67", got)
+	// A mini triangle's edge is exactly half a full one's, which is what
+	// lets two of them sit along it.
+	full, _ := SideOf(nanoleaf.ShapeTriangle)
+	mini, _ := SideOf(nanoleaf.ShapeMiniTriangle)
+	if full != mini*2 {
+		t.Errorf("a triangle is %v and a mini %v: two minis no longer cover one edge", full, mini)
+	}
+	// And a hexagon's edge is the same as a mini's, which is what lets
+	// them be mixed.
+	hex, _ := SideOf(nanoleaf.ShapeHexagon)
+	if hex != mini {
+		t.Errorf("a hexagon is %v and a mini triangle %v: they no longer meet", hex, mini)
+	}
+}
+
+// TestLinesAreDrawnAsBars covers the shapes no regular polygon describes: a
+// Lines bar and a lightstrip segment are long and thin, and they are turned
+// by the orientation the device reports.
+func TestLinesAreDrawnAsBars(t *testing.T) {
+	for _, shapeType := range []int{nanoleaf.ShapeLines, nanoleaf.ShapeLinesSingleZone, nanoleaf.ShapeLightstrip4D} {
+		side, ok := SideOf(shapeType)
+		if !ok {
+			t.Fatalf("%s has no published length", nanoleaf.ShapeName(shapeType))
+		}
+		p := PolygonOf(shapeType, side)
+		if p.Regular() {
+			t.Errorf("%s is drawn as a regular polygon", nanoleaf.ShapeName(shapeType))
+		}
+
+		corners := p.Outline(0, 0, 0)
+		if len(corners) != 4 {
+			t.Fatalf("%s is drawn with %d corners", nanoleaf.ShapeName(shapeType), len(corners))
+		}
+
+		// It lies along its own orientation, so it is as long as the
+		// published length and much thinner than that.
+		var width, height float64
+		for _, c := range corners {
+			width = math.Max(width, math.Abs(c.X)*2)
+			height = math.Max(height, math.Abs(c.Y)*2)
+		}
+		if math.Abs(width-side) > 1e-9 {
+			t.Errorf("%s is %v long, want %v", nanoleaf.ShapeName(shapeType), width, side)
+		}
+		if height >= width/4 {
+			t.Errorf("%s is %v across and %v long, which is not a bar",
+				nanoleaf.ShapeName(shapeType), height, width)
+		}
+
+		// Turned a quarter of the way round, it stands up instead.
+		turned := p.Outline(0, 0, 90)
+		var upright float64
+		for _, c := range turned {
+			upright = math.Max(upright, math.Abs(c.Y)*2)
+		}
+		if math.Abs(upright-side) > 1e-9 {
+			t.Errorf("%s turned upright is %v tall, want %v", nanoleaf.ShapeName(shapeType), upright, side)
+		}
 	}
 }
 
@@ -235,8 +313,46 @@ func TestEdgeTowardReportsWhenNothingFacesThatWay(t *testing.T) {
 		t.Errorf("the downward edge is %d, %v off; want edge 1 exactly", edge, off)
 	}
 
+	// A hexagon with a corner to the right has a flat top, so an edge
+	// faces straight up and none faces sideways.
 	hexagon := PolygonOf(nanoleaf.ShapeHexagon, 134)
-	if edge, off := hexagon.EdgeToward(0, 180); edge != 2 || off > 1e-9 {
-		t.Errorf("a hexagon's left edge is %d, %v off; want edge 2 exactly", edge, off)
+	if edge, off := hexagon.EdgeToward(0, 90); edge != 1 || off > 1e-9 {
+		t.Errorf("a hexagon's top edge is %d, %v off; want edge 1 exactly", edge, off)
+	}
+	if _, off := hexagon.EdgeToward(0, 180); math.Abs(off-30) > 1e-9 {
+		t.Errorf("a flat-topped hexagon reports a sideways edge %v off, want 30", off)
+	}
+}
+
+// TestEveryPanelThatLightsHasALength is the cross-check between the two
+// halves of the same table: a panel this program will draw needs a size to
+// draw it at.
+//
+// The pieces with no LEDs are exempt, and Nanoleaf's own table is
+// inconsistent about them: a Lines connector is given as 11 while the Rhythm
+// module and the Shapes controller are given as N/A. Nothing draws them, so
+// it does not matter.
+func TestEveryPanelThatLightsHasALength(t *testing.T) {
+	for shapeType := range 40 {
+		if !nanoleaf.IsKnownShape(shapeType) {
+			continue
+		}
+		if !(nanoleaf.Panel{ShapeType: shapeType}).IsLight() {
+			continue
+		}
+		side, ok := SideOf(shapeType)
+		if !ok {
+			t.Errorf("%s has a name but no published edge length", nanoleaf.ShapeName(shapeType))
+			continue
+		}
+		if side <= 0 {
+			t.Errorf("%s has an edge length of %v", nanoleaf.ShapeName(shapeType), side)
+		}
+
+		// And it draws as something with an area.
+		corners := PolygonOf(shapeType, side).Outline(0, 0, 0)
+		if len(corners) < 3 {
+			t.Errorf("%s is drawn with %d corners", nanoleaf.ShapeName(shapeType), len(corners))
+		}
 	}
 }

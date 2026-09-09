@@ -27,12 +27,75 @@ type Polygon struct {
 	// Base is the angle of the first corner, before the panel's own
 	// orientation is added.
 	Base float64
+
+	// Thickness, when set, makes the shape a bar: twice Radius long and
+	// this far across, turned by Base plus the panel's orientation. That
+	// is what a Lines bar and a lightstrip segment are, and no regular
+	// polygon can describe one.
+	Thickness float64
 }
+
+// Regular reports whether the shape is a regular polygon, which is what
+// having edges of one length and a meaningful apothem depends on. A bar is
+// not.
+func (p Polygon) Regular() bool { return p.Thickness == 0 }
 
 // unknownSides is how many corners an unrecognised shape is drawn with.
 // Enough to read as a circle, which is the honest picture: the panel is
 // there, and this version does not know its outline.
 const unknownSides = 16
+
+// SideLengths are the edge lengths Nanoleaf publishes for each shape, in the
+// units panel positions are given in.
+//
+// They are in the layout section of Nanoleaf's own API documentation, which
+// also says that the sideLength field a device reports is deprecated as of
+// firmware 5.0.0, "since it cannot represent the side lengths of multiple
+// shapes". A wall can hold two sizes at once -- a Shapes triangle is 134 and
+// a hexagon 67 -- so the length has to come from the shape, not from the
+// layout.
+//
+// The pieces with no LEDs are here too, at the length the documentation gives
+// them, so that a caller which draws them can.
+var sideLengths = map[int]float64{
+	nanoleaf.ShapeLightPanel:    150,
+	nanoleaf.ShapeSquare:        100,
+	nanoleaf.ShapeSquareMaster:  100,
+	nanoleaf.ShapeSquarePassive: 100,
+	nanoleaf.ShapeHexagon:       67,
+	nanoleaf.ShapeTriangle:      134,
+	nanoleaf.ShapeMiniTriangle:  67,
+
+	nanoleaf.ShapeElementsHexagon: 134,
+	// The documentation gives this one as "33.5 / 58". 58 is the piece,
+	// and each of its six lights is drawn at half that; see PolygonOf.
+	nanoleaf.ShapeElementsCorner: 58,
+
+	nanoleaf.ShapeLinesConnector:  11,
+	nanoleaf.ShapeLines:           154,
+	nanoleaf.ShapeLinesSingleZone: 77,
+	nanoleaf.ShapeControllerCap:   11,
+	nanoleaf.ShapePowerConnector:  11,
+
+	nanoleaf.ShapeLightstrip4D: 50,
+
+	nanoleaf.ShapeSkylight:        180,
+	nanoleaf.ShapeSkylightPrimary: 180,
+	nanoleaf.ShapeSkylightPassive: 180,
+}
+
+// SideOf is the published edge length of a shape, and whether there is one.
+func SideOf(shapeType int) (float64, bool) {
+	side, ok := sideLengths[shapeType]
+	return side, ok
+}
+
+// barThickness is how thick a bar is drawn, as a fraction of its length.
+//
+// Wider than life: a Lines bar is about a twentieth of its length across, and
+// at the size a wall is drawn on a page that is a hairline. It is a light bar
+// either way, and being able to see it matters more than the proportion.
+const barThickness = 1.0 / 12
 
 // PolygonOf is the outline of a panel of the given shape, at the given side
 // length.
@@ -45,16 +108,32 @@ const unknownSides = 16
 // turn, o values of 0, 120 and 240 all draw the same up-pointing triangle,
 // which is why the device only ever reports those six values.
 //
-// Hexagons get a corner at the top, which a real layout may override; see
-// Outliner.
+// Hexagons get a corner to the right, which is a flat top and bottom. That is
+// what the openHAB binding draws them as, and a real layout overrides it
+// anyway: see Outliner.
 func PolygonOf(shapeType int, side float64) Polygon {
 	switch shapeType {
 	case nanoleaf.ShapeLightPanel, nanoleaf.ShapeTriangle, nanoleaf.ShapeMiniTriangle:
 		return Polygon{Sides: 3, Radius: side / math.Sqrt(3), Base: 90}
-	case nanoleaf.ShapeSquare, nanoleaf.ShapeSquareMaster, nanoleaf.ShapeSquarePassive:
+
+	case nanoleaf.ShapeSquare, nanoleaf.ShapeSquareMaster, nanoleaf.ShapeSquarePassive,
+		nanoleaf.ShapeSkylight, nanoleaf.ShapeSkylightPrimary, nanoleaf.ShapeSkylightPassive:
 		return Polygon{Sides: 4, Radius: side / math.Sqrt(2), Base: 45}
-	case nanoleaf.ShapeHexagon:
-		return Polygon{Sides: 6, Radius: side, Base: 30}
+
+	case nanoleaf.ShapeHexagon, nanoleaf.ShapeElementsHexagon:
+		return Polygon{Sides: 6, Radius: side, Base: 0}
+
+	case nanoleaf.ShapeElementsCorner:
+		// One Elements hexagon reports six of these, one per corner,
+		// and the device gives each its own position. Drawing each as
+		// a hexagon of half the piece's side puts six of them around
+		// the piece touching each other, which is the closest this can
+		// get to the real thing without a device to look at.
+		return Polygon{Sides: 6, Radius: side / 2, Base: 0}
+
+	case nanoleaf.ShapeLines, nanoleaf.ShapeLinesSingleZone, nanoleaf.ShapeLightstrip4D:
+		return Polygon{Sides: 4, Radius: side / 2, Base: 0, Thickness: side * barThickness}
+
 	default:
 		return Polygon{Sides: unknownSides, Radius: side / 2, Base: 0}
 	}
@@ -82,10 +161,29 @@ func (p Polygon) Apothem() float64 {
 
 // Outline returns the panel's corners, counter-clockwise from Base.
 func (p Polygon) Outline(cx, cy, orientation float64) []Corner {
+	if !p.Regular() {
+		return p.bar(cx, cy, orientation)
+	}
 	out := make([]Corner, p.Sides)
 	for i := range out {
 		rad := radians(p.Base + orientation + float64(i)*p.step())
 		out[i] = Corner{X: cx + p.Radius*math.Cos(rad), Y: cy + p.Radius*math.Sin(rad)}
+	}
+	return out
+}
+
+// bar returns the four corners of a bar, lying along its own orientation.
+func (p Polygon) bar(cx, cy, orientation float64) []Corner {
+	rad := radians(p.Base + orientation)
+	sin, cos := math.Sin(rad), math.Cos(rad)
+	half := p.Thickness / 2
+
+	out := make([]Corner, 0, 4)
+	for _, along := range [][2]float64{{-p.Radius, -half}, {p.Radius, -half}, {p.Radius, half}, {-p.Radius, half}} {
+		out = append(out, Corner{
+			X: cx + along[0]*cos - along[1]*sin,
+			Y: cy + along[0]*sin + along[1]*cos,
+		})
 	}
 	return out
 }
@@ -115,11 +213,9 @@ func radians(degrees float64) float64 { return degrees * math.Pi / 180 }
 // device reports one side length for a layout that may hold two sizes, and
 // which way its corners face, since hexagons can be mounted either way up.
 type Outliner struct {
-	side float64
-
-	// miniHalved says whether mini triangles are drawn at half the
-	// reported side length.
-	miniHalved bool
+	// reported is the layout's own side length, used only for a shape
+	// with no published one.
+	reported float64
 
 	// hexBase is the corner angle for hexagons, inferred from the layout.
 	hexBase float64
@@ -127,47 +223,36 @@ type Outliner struct {
 
 // NewOutliner works out the fixed part of a wall's drawing.
 func NewOutliner(w Wall) Outliner {
-	var hasTriangle, hasMini bool
-	for _, wp := range w.Panels {
-		switch wp.Panel.ShapeType {
-		case nanoleaf.ShapeTriangle:
-			hasTriangle = true
-		case nanoleaf.ShapeMiniTriangle:
-			hasMini = true
-		}
-	}
-
 	side := float64(w.SideLength)
 	if side <= 0 {
-		// A device that reports no side length still has to be drawn.
-		// The value only sets the scale of the picture, and a page
-		// scales to fit whatever comes out.
+		// A device that reports no side length still has to be drawn,
+		// and since firmware 5.0.0 that field is deprecated, so this
+		// is the normal case for a new device rather than a fault. The
+		// value only sets the scale of a shape nothing else describes,
+		// and a page scales to fit whatever comes out.
 		side = 100
 	}
-	return Outliner{
-		side:       side,
-		miniHalved: hasTriangle && hasMini,
-		hexBase:    hexBase(w.Panels),
-	}
+	return Outliner{reported: side, hexBase: hexBase(w.Panels)}
 }
 
 // Side is the side length a panel of this shape is drawn at.
 //
-// A device reports one side length for a whole layout, but a set can mix full
-// triangles with mini ones, whose side is half. The halving is applied only
-// when both are present: in a mini-only set the reported length already is
-// the mini one, and halving it would draw a tiling full of gaps.
+// The published length for the shape, when there is one. A device reports a
+// single length for a whole layout and that cannot describe a wall holding
+// two sizes at once -- a Shapes triangle is 134 and a hexagon 67 -- which is
+// why Nanoleaf deprecated the field. It is still the fallback for a shape
+// this version has never heard of.
 func (o Outliner) Side(shapeType int) float64 {
-	if shapeType == nanoleaf.ShapeMiniTriangle && o.miniHalved {
-		return o.side / 2
+	if side, ok := SideOf(shapeType); ok {
+		return side
 	}
-	return o.side
+	return o.reported
 }
 
 // Polygon is the outline of a panel of this shape on this wall.
 func (o Outliner) Polygon(shapeType int) Polygon {
 	p := PolygonOf(shapeType, o.Side(shapeType))
-	if shapeType == nanoleaf.ShapeHexagon {
+	if shapeType == nanoleaf.ShapeHexagon || shapeType == nanoleaf.ShapeElementsHexagon {
 		p = p.WithBase(o.hexBase)
 	}
 	return p
@@ -193,7 +278,7 @@ func (o Outliner) Outline(wp WallPanel) []Corner {
 func hexBase(panels []WallPanel) float64 {
 	hexes := make([]WallPanel, 0, len(panels))
 	for _, wp := range panels {
-		if wp.Panel.ShapeType == nanoleaf.ShapeHexagon {
+		if wp.Panel.ShapeType == nanoleaf.ShapeHexagon || wp.Panel.ShapeType == nanoleaf.ShapeElementsHexagon {
 			hexes = append(hexes, wp)
 		}
 	}

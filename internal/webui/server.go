@@ -142,11 +142,6 @@ type Options struct {
 	// paint them on.
 	Build []Kind
 
-	// BuildSide is the edge length of that wall, in the device's own
-	// units. A device reports one length for a whole layout, so a built
-	// wall has one too.
-	BuildSide int
-
 	// Port is the loopback port to listen on. Zero picks a free one.
 	Port int
 }
@@ -226,9 +221,6 @@ func New(ctx context.Context, o Options) (*Server, error) {
 		if o.Open != nil {
 			return nil, errors.New("webui: a wall the page builds cannot be painted on a device")
 		}
-		if o.BuildSide <= 0 {
-			return nil, fmt.Errorf("webui: a built wall needs a side length, got %d", o.BuildSide)
-		}
 		// Offered last, after the arrangements that already exist.
 		o.Shapes = append(o.Shapes, Shape{Name: BuildShape, Label: buildLabel})
 	}
@@ -287,12 +279,12 @@ func New(ctx context.Context, o Options) (*Server, error) {
 		},
 	}
 	if len(o.Build) > 0 {
-		s.build = newEditor(o.BuildSide, o.Build)
+		s.build = newEditor(o.Build)
 	}
 	if first := pics[o.Shapes[0].Name]; first != nil {
 		s.snap = first.snapshot(s.state, first.frame(s.state, 0))
 	} else {
-		s.snap = emptySnapshot(s.state, o.BuildSide)
+		s.snap = emptySnapshot(s.state, s.build.frameSide())
 	}
 	return s, nil
 }
@@ -507,7 +499,7 @@ func (s *Server) pump(ctx context.Context, stream Stream) error {
 		// only thing to show is where the first panel can go.
 		if pic == nil {
 			s.mu.Lock()
-			snap := emptySnapshot(state, s.opt.BuildSide)
+			snap := emptySnapshot(state, s.build.frameSide())
 			if editing && state.Placing != noPlacing {
 				snap.Spots = s.build.spotViews(state.Placing, emptyFrame())
 			}

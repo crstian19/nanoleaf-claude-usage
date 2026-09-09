@@ -497,14 +497,60 @@ failed send reopens the stream and says so on the page, and only a device that
 keeps refusing for ten seconds ends the session. The daemon does the same
 thing for the same reason.
 
+### The range, and where the sizes come from
+
+Nanoleaf's own layout documentation lists twenty shape numbers, and
+`pkg/nanoleaf` names all twenty: Light Panels and the Rhythm module, three
+Canvas squares, the three Shapes and their controller, two Elements, five
+pieces of Lines, the 4D lightstrip and three Skylight panels. Numbers 5, 6,
+10, 11, 13 and 21 to 28 are not used, and a shape in one of those gaps is
+reported as unknown, still lit and still drawn — a panel nobody has heard of
+is a panel, and leaving it dark would be a hole in the display.
+
+Three judgements are this program's rather than Nanoleaf's, and each is in
+one place:
+
+**Which pieces have no LEDs.** The Rhythm module, the Shapes controller, a
+Lines connector, a controller cap and a power connector. Lighting one puts a
+hole in every frame, and treating a real panel as one of them does the same,
+which is why the list is short and `NANOCLAUDE_SKIP_SHAPES` exists for a
+model this version does not know.
+
+**Which product line each belongs to.** Panels only clip to panels of their
+own line, and two shapes can share an edge length by coincidence: an Elements
+hexagon and a Shapes triangle are both 134. Without the family check the
+shape builder would offer a wall that looks possible and cannot be built.
+
+**Which are put together edge to edge.** A Lines bar and a lightstrip segment
+join end to end at a connector, and an Elements hexagon that lights its
+corners reports six panels for one physical piece. None of those three is a
+tiling, so the builder refuses them and their samples are walked out by hand.
+
+The side lengths are published per shape, and that is the part which had been
+wrong here. `render.SideOf` holds the table, and the length a device reports
+for the whole layout is now only the fallback for a shape with no published
+one. Nanoleaf deprecated that field in firmware 5.0.0, in their words
+"since it cannot represent the side lengths of multiple shapes": a Shapes
+triangle is 134 and a hexagon 67, and both go on the same wall. Two mini
+triangles therefore fit along one triangle edge, a hexagon fits on half of
+one, and a hexagon and a mini triangle are interchangeable. The code had used
+one number for the whole wall and halved mini triangles by a heuristic, which
+drew a mixed Shapes wall at the wrong scale.
+
+Lines bars are the one shape no regular polygon describes, so `render.Polygon`
+grew a thickness: with it set, the shape is a bar of that width lying along
+its own orientation. It is drawn thicker than life, because a bar a twentieth
+of its length across is a hairline at the size a wall is drawn on a page.
+
 ### Sample shapes, because every wall is different
 
 The arrangement this was written against is nine triangles in a diagonal
 zigzag. Nothing about the drawing, the bands or the long axis is allowed to
 depend on that, and the only way to know is to look at other walls.
-`internal/shapes` holds ten of them: honeycombs, a mixed hexagon-and-triangle
-flower, grids, rows, blocks, both sizes of triangle together, and the original
-Light Panels. `nanoclaude preview --web` serves the same page over them with
+`internal/shapes` holds fifteen, and between them they cover every shape in
+the range: the three Shapes in rows, blocks, honeycombs and mixtures, both
+Elements, Canvas, the Aurora with its Rhythm module, a Lines zigzag, the 4D
+lightstrip round a screen, and a Skylight ceiling. `nanoclaude preview --web` serves the same page over them with
 no device attached, so there is nothing to paint and no angle worth saving —
 the page hides its Save button and says so.
 

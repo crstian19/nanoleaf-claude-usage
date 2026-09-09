@@ -195,6 +195,12 @@ type Info struct {
 	BuildShape string `json:"buildShape,omitempty"`
 	Kinds      []Kind `json:"kinds,omitempty"`
 
+	// Placeable are the kinds that have somewhere to go on the wall as it
+	// stands. A page greys out the rest: a Canvas square cannot join a
+	// wall of Shapes triangles, and someone dragging one deserves to be
+	// told before they try.
+	Placeable []int `json:"placeable,omitempty"`
+
 	// Panels is how many panels the device reports and Lit how many of
 	// them the display can light.
 	Panels int `json:"panels"`
@@ -235,8 +241,10 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	// here and used after the lock is dropped.
 	var buildShape string
 	var kinds []Kind
+	var placeable []int
 	if s.build != nil {
 		buildShape, kinds = BuildShape, s.build.kinds
+		placeable = s.build.placeable()
 	}
 	s.mu.Unlock()
 
@@ -259,6 +267,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, Info{
 		BuildShape:        buildShape,
 		Kinds:             kinds,
+		Placeable:         placeable,
 		Shapes:            options,
 		Shape:             state.Shape,
 		Live:              s.opt.Open != nil,

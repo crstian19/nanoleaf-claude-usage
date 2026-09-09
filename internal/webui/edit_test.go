@@ -26,9 +26,8 @@ func buildKinds() []Kind {
 func newBuildServer(t *testing.T) *Server {
 	t.Helper()
 	s, err := New(t.Context(), Options{
-		Shapes:    []Shape{{Name: "sample", Label: "a sample", Layout: realLayout(t)}},
-		Build:     buildKinds(),
-		BuildSide: 134,
+		Shapes: []Shape{{Name: "sample", Label: "a sample", Layout: realLayout(t)}},
+		Build:  buildKinds(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -283,11 +282,10 @@ func TestThePageIsToldItCanBuild(t *testing.T) {
 func TestAWallToBuildNeedsNoDevice(t *testing.T) {
 	rec := &panels{}
 	_, err := New(t.Context(), Options{
-		Shapes:    []Shape{{Layout: realLayout(t)}},
-		Open:      rec.open,
-		Save:      rec.save,
-		Build:     buildKinds(),
-		BuildSide: 134,
+		Shapes: []Shape{{Layout: realLayout(t)}},
+		Open:   rec.open,
+		Save:   rec.save,
+		Build:  buildKinds(),
 	})
 	if err == nil {
 		t.Fatal("a session was allowed to build a wall and paint a device")
@@ -296,8 +294,10 @@ func TestAWallToBuildNeedsNoDevice(t *testing.T) {
 		t.Errorf("the error is %q", err)
 	}
 
-	if _, err := New(t.Context(), Options{Build: buildKinds()}); err == nil {
-		t.Error("a built wall was allowed with no side length")
+	// A wall to build is enough on its own: it needs no arrangement
+	// beside it, because it is one.
+	if _, err := New(t.Context(), Options{Build: buildKinds()}); err != nil {
+		t.Errorf("a session with only a wall to build was refused: %v", err)
 	}
 }
 
@@ -324,5 +324,63 @@ func TestAnEmptyWallIsStillAPicture(t *testing.T) {
 	// And the first panel can be dropped in the middle of it.
 	if got := spots(t, s, nanoleaf.ShapeHexagon); len(got) != 1 {
 		t.Errorf("an empty wall offers %d places, want 1", len(got))
+	}
+}
+
+// TestOnlyTheKindsThatFitAreOffered is how the page says that two product
+// lines do not clip together, without anyone having to read it: the panels
+// with nowhere to go are greyed out.
+func TestOnlyTheKindsThatFitAreOffered(t *testing.T) {
+	rec := &panels{}
+	s, err := New(t.Context(), Options{
+		Build: []Kind{
+			{Shape: nanoleaf.ShapeTriangle, Label: "Shapes triangle"},
+			{Shape: nanoleaf.ShapeMiniTriangle, Label: "Mini triangle"},
+			{Shape: nanoleaf.ShapeHexagon, Label: "Shapes hexagon"},
+			{Shape: nanoleaf.ShapeSquare, Label: "Canvas square"},
+			{Shape: nanoleaf.ShapeElementsHexagon, Label: "Elements hexagon"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	_ = rec
+
+	read := func() []int {
+		t.Helper()
+		var info Info
+		if err := json.Unmarshal(call(t, s, http.MethodGet, s.pageURL()+"info", "").Body.Bytes(), &info); err != nil {
+			t.Fatal(err)
+		}
+		return info.Placeable
+	}
+
+	// An empty wall takes anything.
+	if got := len(read()); got != 5 {
+		t.Errorf("an empty wall offers %d of 5 kinds", got)
+	}
+
+	// A Shapes triangle on it, and now only the Shapes panels fit: a
+	// hexagon and a mini triangle by their edge of 67, a triangle by its
+	// own 134. An Elements hexagon is also 134 and still does not clip,
+	// because it is another product line, and a Canvas square is neither.
+	if code := edit(t, s, `{"action":"place","shape":8}`); code != http.StatusOK {
+		t.Fatalf("placing a triangle returned %d", code)
+	}
+
+	want := map[int]bool{
+		nanoleaf.ShapeTriangle:     true,
+		nanoleaf.ShapeMiniTriangle: true,
+		nanoleaf.ShapeHexagon:      true,
+	}
+	got := read()
+	if len(got) != len(want) {
+		t.Errorf("a wall of one triangle offers %v, want %v", got, want)
+	}
+	for _, shapeType := range got {
+		if !want[shapeType] {
+			t.Errorf("%s is offered on a wall of Shapes triangles", nanoleaf.ShapeName(shapeType))
+		}
 	}
 }

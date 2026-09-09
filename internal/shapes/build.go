@@ -31,14 +31,14 @@ import (
 // returned after a failure is invalid, and using one is itself an error, so
 // nothing is placed on a guess.
 type Builder struct {
-	side   float64
+	// side is the length reported in the finished layout. Every shape has
+	// its own published length, so this is only what a device would put in
+	// the field it deprecated: the first panel's.
+	side float64
+
 	panels []placed
 	nextID int
 	err    error
-
-	// miniScale says the declared side length is already a mini
-	// triangle's, because that is what the wall is made of.
-	miniScale bool
 }
 
 // placed is a panel as the builder holds it, before it is reported.
@@ -62,28 +62,33 @@ type placed struct {
 }
 
 // Empty begins an arrangement with nothing on it, for an editor to fill.
-//
-// side is the edge length every panel on this wall will have, which a device
-// reports once for the whole layout and cannot therefore vary.
-func Empty(side int, miniScale bool) *Builder {
-	b := &Builder{side: float64(side), nextID: firstID, miniScale: miniScale}
-	if side <= 0 {
-		b.err = fmt.Errorf("shapes: side length %d is not a length", side)
-	}
-	return b
+func Empty() *Builder {
+	return &Builder{nextID: firstID}
 }
 
 // Start begins an arrangement with one panel, at the origin, unturned.
-func Start(side int, shapeType int) *Builder {
-	b := &Builder{side: float64(side)}
-	if side <= 0 {
-		b.err = fmt.Errorf("shapes: side length %d is not a length", side)
-		return b
-	}
-	b.panels = []placed{{id: firstID, shapeType: shapeType}}
-	b.nextID = firstID + 1
-	b.miniScale = shapeType == nanoleaf.ShapeMiniTriangle
+func Start(shapeType int) *Builder {
+	b := Empty()
+	b.Place(shapeType)
 	return b
+}
+
+// sideOf is the published edge length of a shape.
+//
+// Every shape has one, and it is the shape's own rather than the wall's: a
+// Shapes triangle is 134 and a hexagon 67, and both go on the same wall.
+// Nanoleaf deprecated the single length a device reports for exactly that
+// reason.
+func sideOf(shapeType int) (float64, error) {
+	side, ok := render.SideOf(shapeType)
+	if !ok {
+		return 0, fmt.Errorf("shapes: no published edge length for %s, so it cannot be built with",
+			nanoleaf.ShapeName(shapeType))
+	}
+	if side <= 0 {
+		return 0, fmt.Errorf("shapes: %s has no edge to attach to", nanoleaf.ShapeName(shapeType))
+	}
+	return side, nil
 }
 
 // Attach places a panel against one edge of another, and returns its index.
@@ -165,19 +170,74 @@ func (b *Builder) Panels() int {
 }
 
 // Place puts the first panel on an empty wall, at the origin.
+//
+// The first panel also decides what the finished layout reports as its side
+// length, the way a device reports the length of whatever it is mostly made
+// of.
 func (b *Builder) Place(shapeType int) int {
-	if b.Panels() > 0 {
-		return b.fail(errors.New("shapes: the wall already has a panel; attach to one of its edges"))
-	}
 	if b.err != nil {
 		return invalidPanel
 	}
-	if shapeType == nanoleaf.ShapeMiniTriangle && !b.miniScale {
-		// A wall of minis declares their own side length, so the first
-		// one decides the scale rather than inheriting it.
-		b.miniScale = true
+	if b.Panels() > 0 {
+		return b.fail(errors.New("shapes: the wall already has a panel; attach to one of its edges"))
 	}
+	side, err := b.buildable(shapeType)
+	if err != nil {
+		return b.fail(err)
+	}
+	b.side = side
 	return b.place(placed{shapeType: shapeType}, false)
+}
+
+// buildable reports the edge length of a shape a wall can be built from, and
+// refuses the ones it cannot.
+func (b *Builder) buildable(shapeType int) (float64, error) {
+	if blankShape(shapeType) {
+		return 0, fmt.Errorf("shapes: a %s has no LEDs, so it is not part of a wall",
+			nanoleaf.ShapeName(shapeType))
+	}
+	side, err := sideOf(shapeType)
+	if err != nil {
+		return 0, err
+	}
+	if !edgeTiled(shapeType) {
+		return 0, fmt.Errorf("shapes: %s panels are not put together edge to edge",
+			nanoleaf.ShapeName(shapeType))
+	}
+	return side, nil
+}
+
+// edgeTiled reports whether panels of this kind are put together edge to
+// edge, which is the only way this package knows how to build a wall.
+//
+// Three kinds are not. A Lines bar and a lightstrip segment join end to end
+// at a connector, and the angles allowed there are the connector's business.
+// An Elements hexagon that lights its corners reports six panels for one
+// physical piece, so those six are parts of a hexagon rather than six
+// hexagons that meet.
+func edgeTiled(shapeType int) bool {
+	switch shapeType {
+	case nanoleaf.ShapeElementsCorner,
+		nanoleaf.ShapeLines, nanoleaf.ShapeLinesSingleZone, nanoleaf.ShapeLightstrip4D:
+		return false
+	default:
+		if blankShape(shapeType) {
+			return false
+		}
+		side, ok := render.SideOf(shapeType)
+		return ok && side > 0 && render.PolygonOf(shapeType, side).Regular()
+	}
+}
+
+// Tiles reports whether every panel of a sample meets its neighbours edge to
+// edge, which is what makes it a wall rather than a figure.
+func (s Sample) Tiles() bool {
+	for _, p := range s.Layout.Panels {
+		if p.IsLight() && !edgeTiled(p.ShapeType) {
+			return false
+		}
+	}
+	return true
 }
 
 // Remove takes a panel off the wall.
@@ -207,11 +267,10 @@ func (b *Builder) Clone() *Builder {
 	panels := make([]placed, len(b.panels))
 	copy(panels, b.panels)
 	return &Builder{
-		side:      b.side,
-		panels:    panels,
-		nextID:    b.nextID,
-		err:       b.err,
-		miniScale: b.miniScale,
+		side:   b.side,
+		panels: panels,
+		nextID: b.nextID,
+		err:    b.err,
 	}
 }
 
@@ -271,14 +330,17 @@ func (b *Builder) candidate(panel, edge, shapeType, half int, halfEdge bool) (pl
 			panel, hostPoly.Sides, edge)
 	}
 
-	// A mini triangle is only drawn at half size when the layout also
-	// holds a full one, because that is all a device's single side length
-	// can say. Building minis into a wall that has none would be built at
-	// one scale and drawn at another.
-	if shapeType == nanoleaf.ShapeMiniTriangle && !b.miniScale && !b.hasFullTriangle() {
-		return placed{}, fmt.Errorf(
-			"shapes: mini triangles here would be drawn at %v, not %v: start the wall from a triangle or from a mini",
-			b.side, b.side/2)
+	if _, err := b.buildable(shapeType); err != nil {
+		return placed{}, err
+	}
+
+	// Panels only clip to panels of their own product line. Two shapes
+	// can share an edge length by coincidence -- an Elements hexagon and
+	// a Shapes triangle are both 134 -- and a wall mixing them would look
+	// possible while being impossible to build.
+	hostFamily, newFamily := nanoleaf.FamilyOf(host.shapeType), nanoleaf.FamilyOf(shapeType)
+	if hostFamily != newFamily {
+		return placed{}, fmt.Errorf("shapes: %s panels do not clip to %s panels", newFamily, hostFamily)
 	}
 
 	newPoly := b.polygon(shapeType)
@@ -356,11 +418,8 @@ func (b *Builder) Spots(shapeType int) []Spot {
 		return []Spot{{Panel: invalidPanel, Edge: 0, Half: NoHalf}}
 	}
 
-	halves := []int{NoHalf}
-	// A panel whose edge is half the wall's covers half of an edge, and
-	// there are two halves to choose from.
-	if b.polygon(shapeType).Side() < b.side-sideTolerance {
-		halves = []int{0, 1}
+	if _, err := b.buildable(shapeType); err != nil {
+		return nil
 	}
 
 	spots := make([]Spot, 0, len(b.panels)*3)
@@ -368,6 +427,15 @@ func (b *Builder) Spots(shapeType int) []Spot {
 		if host.gone || blankShape(host.shapeType) {
 			continue
 		}
+
+		// A panel of the same size covers a whole edge; one whose edge
+		// is half as long covers half of it, and there are two halves
+		// to choose from.
+		halves := []int{NoHalf}
+		if b.polygon(shapeType).Side() < b.polygon(host.shapeType).Side()-sideTolerance {
+			halves = []int{0, 1}
+		}
+
 		sides := b.polygon(host.shapeType).Sides
 		for edge := range sides {
 			for _, half := range halves {
@@ -480,35 +548,15 @@ func (b *Builder) edgeToward(panel int, degrees float64) (int, error) {
 // which is what a page draws while one is being dragged onto it.
 func (b *Builder) PolygonOf(shapeType int) render.Polygon { return b.polygon(shapeType) }
 
-// Side is the edge length this wall reports.
+// Side is the edge length this wall reports, which is its first panel's.
 func (b *Builder) Side() int { return int(math.Round(b.side)) }
 
-// polygon is the outline of a panel of this shape in this arrangement.
-//
-// Mini triangles are half the declared side length, unless the wall is made
-// of them, in which case the declared length is already theirs. That is the
-// same rule the drawing applies to a layout read from a device, and it has to
-// be: a wall built at one scale and drawn at another would not tile on screen.
+// polygon is the outline of a panel of this shape, at the shape's own
+// published edge length. It is the same call the drawing makes, so a wall
+// built edge to edge is drawn edge to edge.
 func (b *Builder) polygon(shapeType int) render.Polygon {
-	side := b.side
-	if shapeType == nanoleaf.ShapeMiniTriangle && !b.miniScale {
-		side /= 2
-	}
+	side, _ := render.SideOf(shapeType)
 	return render.PolygonOf(shapeType, side)
-}
-
-// hasFullTriangle reports whether a full-size triangle has been placed, which
-// is what tells the drawing that this wall's mini triangles are half size.
-func (b *Builder) hasFullTriangle() bool {
-	for _, p := range b.panels {
-		if p.gone {
-			continue
-		}
-		if p.shapeType == nanoleaf.ShapeTriangle || p.shapeType == nanoleaf.ShapeLightPanel {
-			return true
-		}
-	}
-	return false
 }
 
 // panel returns a panel on the wall by its identity.

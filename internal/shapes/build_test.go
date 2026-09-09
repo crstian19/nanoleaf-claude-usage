@@ -31,18 +31,17 @@ func centres(t *testing.T, b *Builder) map[[2]int]int {
 // lattice the caller keeps in their head would not have this property, which
 // is the reason the builder exists.
 func TestTheOrderPanelsGoOnDoesNotMatter(t *testing.T) {
-	const side = 134
 	hex := nanoleaf.ShapeHexagon
 
 	// A honeycomb, clockwise from the right.
-	clockwise := Start(side, hex)
+	clockwise := Start(hex)
 	for edge := range 6 {
 		clockwise.Attach(clockwise.First(), edge, hex)
 	}
 
 	// The same honeycomb, built outwards and backwards: two opposite
 	// petals first, then the rest in the other direction.
-	scattered := Start(side, hex)
+	scattered := Start(hex)
 	scattered.Attach(scattered.First(), 3, hex)
 	scattered.Attach(scattered.First(), 0, hex)
 	for _, edge := range []int{5, 4, 2, 1} {
@@ -65,7 +64,7 @@ func TestTheOrderPanelsGoOnDoesNotMatter(t *testing.T) {
 // edge something is already on has to fail rather than stack two panels in
 // one place.
 func TestAnOccupiedEdgeIsRefused(t *testing.T) {
-	b := Start(134, nanoleaf.ShapeTriangle)
+	b := Start(nanoleaf.ShapeTriangle)
 	b.Attach(b.First(), 0, nanoleaf.ShapeTriangle)
 	b.Attach(b.First(), 0, nanoleaf.ShapeTriangle)
 
@@ -89,7 +88,7 @@ func TestShapesThatDoNotMeetAreRefused(t *testing.T) {
 		{
 			name: "a mini triangle on a full one is half an edge",
 			build: func() *Builder {
-				b := Start(134, nanoleaf.ShapeTriangle)
+				b := Start(nanoleaf.ShapeTriangle)
 				b.Attach(b.First(), 0, nanoleaf.ShapeMiniTriangle)
 				return b
 			},
@@ -98,7 +97,7 @@ func TestShapesThatDoNotMeetAreRefused(t *testing.T) {
 		{
 			name: "an edge a triangle does not have",
 			build: func() *Builder {
-				b := Start(134, nanoleaf.ShapeTriangle)
+				b := Start(nanoleaf.ShapeTriangle)
 				b.Attach(b.First(), 3, nanoleaf.ShapeTriangle)
 				return b
 			},
@@ -107,7 +106,7 @@ func TestShapesThatDoNotMeetAreRefused(t *testing.T) {
 		{
 			name: "a panel that was never placed",
 			build: func() *Builder {
-				b := Start(134, nanoleaf.ShapeTriangle)
+				b := Start(nanoleaf.ShapeTriangle)
 				b.Attach(7, 0, nanoleaf.ShapeTriangle)
 				return b
 			},
@@ -116,20 +115,66 @@ func TestShapesThatDoNotMeetAreRefused(t *testing.T) {
 		{
 			name: "a direction no edge faces",
 			build: func() *Builder {
-				b := Start(134, nanoleaf.ShapeTriangle)
+				b := Start(nanoleaf.ShapeTriangle)
 				b.AttachToward(b.First(), up, nanoleaf.ShapeTriangle)
 				return b
 			},
 			expect: "no edge",
 		},
 		{
-			name: "mini triangles with nothing to give them a scale",
+			// Both are 134 across the edge, which is a
+			// coincidence: they are different product lines and do
+			// not clip together.
+			name: "an Elements hexagon on a Shapes triangle",
 			build: func() *Builder {
-				b := Start(134, nanoleaf.ShapeHexagon)
-				b.Attach(b.First(), 0, nanoleaf.ShapeMiniTriangle)
+				b := Start(nanoleaf.ShapeTriangle)
+				b.Attach(b.First(), 0, nanoleaf.ShapeElementsHexagon)
 				return b
 			},
-			expect: "drawn at",
+			expect: "do not clip",
+		},
+		{
+			name: "a Lines bar, which joins at a connector",
+			build: func() *Builder {
+				b := Start(nanoleaf.ShapeTriangle)
+				b.Attach(b.First(), 0, nanoleaf.ShapeLines)
+				return b
+			},
+			expect: "edge to edge",
+		},
+		{
+			name: "a wall started from a bar",
+			build: func() *Builder {
+				return Start(nanoleaf.ShapeLightstrip4D)
+			},
+			expect: "edge to edge",
+		},
+		{
+			name: "a piece with no LEDs",
+			build: func() *Builder {
+				b := Start(nanoleaf.ShapeTriangle)
+				b.Attach(b.First(), 0, nanoleaf.ShapeLinesConnector)
+				return b
+			},
+			expect: "no LEDs",
+		},
+		{
+			name: "the Elements hexagon that lights its corners",
+			build: func() *Builder {
+				b := Start(nanoleaf.ShapeElementsHexagon)
+				b.Attach(b.First(), 0, nanoleaf.ShapeElementsCorner)
+				return b
+			},
+			expect: "edge to edge",
+		},
+		{
+			name: "a shape no version of this knows",
+			build: func() *Builder {
+				b := Start(nanoleaf.ShapeTriangle)
+				b.Attach(b.First(), 0, 200)
+				return b
+			},
+			expect: "no published edge length",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -147,7 +192,7 @@ func TestShapesThatDoNotMeetAreRefused(t *testing.T) {
 // TestTheFirstFailureSticks keeps a broken wall from being half built: every
 // placement after a failure is refused too, so nothing lands on a guess.
 func TestTheFirstFailureSticks(t *testing.T) {
-	b := Start(134, nanoleaf.ShapeTriangle)
+	b := Start(nanoleaf.ShapeTriangle)
 	bad := b.Attach(b.First(), 9, nanoleaf.ShapeTriangle)
 	if bad != invalidPanel {
 		t.Errorf("a refused placement returned index %d", bad)
@@ -166,7 +211,7 @@ func TestTheFirstFailureSticks(t *testing.T) {
 // triangles fit along one edge of a full triangle, each covering half of it.
 func TestTwoMinisCoverOneEdge(t *testing.T) {
 	const side = 134.0
-	b := Start(int(side), nanoleaf.ShapeTriangle)
+	b := Start(nanoleaf.ShapeTriangle)
 	// The downward edge of an upward triangle.
 	b.AttachHalfToward(b.First(), 270, nanoleaf.ShapeMiniTriangle, 0)
 	b.AttachHalfToward(b.First(), 270, nanoleaf.ShapeMiniTriangle, 1)
@@ -238,7 +283,7 @@ func pointToSegment(p, from, to render.Corner) float64 {
 // tiling was four units out -- enough that the far end no longer met.
 func TestRoundingDoesNotDriftAcrossAWall(t *testing.T) {
 	const side = 67
-	b := Start(side, nanoleaf.ShapeMiniTriangle)
+	b := Start(nanoleaf.ShapeMiniTriangle)
 	last := b.First()
 	for range 19 {
 		last = b.AttachToward(last, right, nanoleaf.ShapeMiniTriangle)
@@ -269,12 +314,12 @@ func TestSpotsAreEveryPlaceAPanelFits(t *testing.T) {
 	hex := nanoleaf.ShapeHexagon
 
 	// An empty wall has one place to put anything: the middle.
-	empty := Empty(134, false)
+	empty := Empty()
 	if spots := empty.Spots(hex); len(spots) != 1 || spots[0].Panel != invalidPanel {
 		t.Fatalf("an empty wall offers %+v, want one spot attached to nothing", spots)
 	}
 
-	b := Start(134, hex)
+	b := Start(hex)
 	if got := len(b.Spots(hex)); got != 6 {
 		t.Errorf("a lone hexagon offers %d spots, want 6", got)
 	}
@@ -288,7 +333,7 @@ func TestSpotsAreEveryPlaceAPanelFits(t *testing.T) {
 
 	// Every spot has to be somewhere a panel really can go.
 	for _, spot := range b.Spots(hex) {
-		trial := Start(134, hex)
+		trial := Start(hex)
 		trial.Attach(trial.First(), 0, hex)
 		if id := trial.Attach(spot.Panel, spot.Edge, hex); id == invalidPanel {
 			_, err := trial.Layout()
@@ -301,7 +346,7 @@ func TestSpotsAreEveryPlaceAPanelFits(t *testing.T) {
 // triangles fit along one edge of a full one, so a mini being dragged has two
 // places to land on every edge.
 func TestAHalfSizePanelGetsTwoSpotsPerEdge(t *testing.T) {
-	b := Start(134, nanoleaf.ShapeTriangle)
+	b := Start(nanoleaf.ShapeTriangle)
 
 	full := b.Spots(nanoleaf.ShapeTriangle)
 	if len(full) != 3 {
@@ -330,7 +375,7 @@ func TestAHalfSizePanelGetsTwoSpotsPerEdge(t *testing.T) {
 // identities from a moment ago: if removing one renumbered the rest, the next
 // click would land on a different panel.
 func TestRemovingAPanelLeavesTheOthersAlone(t *testing.T) {
-	b := Start(134, nanoleaf.ShapeHexagon)
+	b := Start(nanoleaf.ShapeHexagon)
 	first := b.First()
 	second := b.Attach(first, 0, nanoleaf.ShapeHexagon)
 	third := b.Attach(first, 2, nanoleaf.ShapeHexagon)
@@ -374,7 +419,7 @@ func TestRemovingAPanelLeavesTheOthersAlone(t *testing.T) {
 // placement from wedging a wall: every edit is applied to a copy, and the
 // copy is kept only if it worked.
 func TestATriedChangeLeavesNothingBehind(t *testing.T) {
-	b := Start(134, nanoleaf.ShapeHexagon)
+	b := Start(nanoleaf.ShapeHexagon)
 	b.Attach(b.First(), 0, nanoleaf.ShapeHexagon)
 
 	// A refused placement, on a copy.
@@ -408,7 +453,7 @@ func TestATriedChangeLeavesNothingBehind(t *testing.T) {
 // panel in the middle of a wall that already has one, where it would overlap
 // whatever is there.
 func TestTheFirstPanelGoesOnAnEmptyWallOnly(t *testing.T) {
-	b := Empty(134, false)
+	b := Empty()
 	if id := b.Place(nanoleaf.ShapeTriangle); id == invalidPanel {
 		t.Fatalf("the first panel was refused: %v", b.err)
 	}
@@ -417,7 +462,7 @@ func TestTheFirstPanelGoesOnAnEmptyWallOnly(t *testing.T) {
 	}
 
 	// A wall of minis declares their own size, which the first one sets.
-	minis := Empty(67, false)
+	minis := Empty()
 	minis.Place(nanoleaf.ShapeMiniTriangle)
 	minis.AttachToward(minis.First(), right, nanoleaf.ShapeMiniTriangle)
 	layout, err := minis.Layout()
@@ -426,5 +471,44 @@ func TestTheFirstPanelGoesOnAnEmptyWallOnly(t *testing.T) {
 	}
 	if got := layout.Panels[1].X - layout.Panels[0].X; got != 34 {
 		t.Errorf("mini triangles on their own wall are %d apart, want 34 (half of 67)", got)
+	}
+}
+
+// TestHexagonsAndMiniTrianglesMeet is the pair the published edge lengths
+// make possible, and the reason those lengths cannot come from the layout: a
+// Shapes hexagon and a mini triangle are both 67, while a full triangle is
+// 134.
+func TestHexagonsAndMiniTrianglesMeet(t *testing.T) {
+	b := Start(nanoleaf.ShapeHexagon)
+	for edge := range 6 {
+		if id := b.Attach(b.First(), edge, nanoleaf.ShapeMiniTriangle); id == invalidPanel {
+			_, err := b.Layout()
+			t.Fatalf("a mini triangle would not go on a hexagon: %v", err)
+		}
+	}
+
+	layout, err := b.Layout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(layout.Panels) != 7 {
+		t.Errorf("the wall has %d panels, want 7", len(layout.Panels))
+	}
+	// The layout reports its first panel's length, which is the hexagon's.
+	if layout.SideLength != 67 {
+		t.Errorf("the wall reports a side length of %d, want 67", layout.SideLength)
+	}
+
+	// And two minis fit along one edge of a full triangle, which is the
+	// other half of the same fact.
+	full := Start(nanoleaf.ShapeTriangle)
+	for half := range 2 {
+		if id := full.AttachHalfToward(full.First(), 270, nanoleaf.ShapeMiniTriangle, half); id == invalidPanel {
+			_, err := full.Layout()
+			t.Fatalf("a mini triangle would not go on half a triangle edge: %v", err)
+		}
+	}
+	if got := full.Panels(); got != 3 {
+		t.Errorf("the wall has %d panels, want 3", got)
 	}
 }

@@ -372,6 +372,18 @@ el("arrangement").addEventListener("change", async (event) => {
 
 // -- building a wall -------------------------------------------------------
 
+// placeable greys out the panels that have nowhere to go on this wall, which
+// is how a page says that a Canvas square does not clip to a Shapes triangle
+// without anybody having to read it.
+function placeable(info) {
+  const allowed = new Set(info.placeable || []);
+  for (const button of document.querySelectorAll(".palette button")) {
+    const canGo = allowed.has(Number(button.dataset.shape));
+    button.disabled = !canGo;
+    button.title = canGo ? "" : "Nowhere on this wall: it does not clip to what is already there.";
+  }
+}
+
 function palette(info) {
   editor.kinds = info.kinds || [];
   editor.name = info.buildShape || "";
@@ -513,6 +525,7 @@ async function loadFacts() {
   }
   const info = await res.json();
   facts(info);
+  placeable(info);
   return info;
 }
 

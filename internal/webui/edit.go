@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/crstian19/nanoleaf-claude-usage/internal/render"
 	"github.com/crstian19/nanoleaf-claude-usage/internal/shapes"
@@ -40,7 +41,6 @@ type Kind struct {
 // and hands the render loop the finished drawing rather than the editor.
 type editor struct {
 	kinds []Kind
-	side  int
 
 	// steps is never empty. The last is the wall as it stands.
 	steps []*shapes.Builder
@@ -52,12 +52,28 @@ type editor struct {
 }
 
 // newEditor starts an empty wall.
-func newEditor(side int, kinds []Kind) *editor {
+func newEditor(kinds []Kind) *editor {
 	return &editor{
 		kinds: kinds,
-		side:  side,
-		steps: []*shapes.Builder{shapes.Empty(side, false)},
+		steps: []*shapes.Builder{shapes.Empty()},
 	}
+}
+
+// frameSide is how big to draw the frame of a wall with nothing on it yet.
+//
+// The biggest panel the palette offers, since the first one dropped could be
+// any of them. Once there is a panel the drawing measures the wall itself.
+func (e *editor) frameSide() int {
+	biggest := 0.0
+	for _, kind := range e.kinds {
+		if side, ok := render.SideOf(kind.Shape); ok {
+			biggest = math.Max(biggest, side)
+		}
+	}
+	if biggest <= 0 {
+		return 134
+	}
+	return int(biggest)
 }
 
 // wall is the wall as it stands.
@@ -100,7 +116,7 @@ func (e *editor) undo() error {
 
 // clear takes everything off the wall.
 func (e *editor) clear() error {
-	e.steps = []*shapes.Builder{shapes.Empty(e.side, false)}
+	e.steps = []*shapes.Builder{shapes.Empty()}
 	return e.redraw()
 }
 
@@ -120,6 +136,23 @@ func (e *editor) redraw() error {
 	}
 	e.pic = pic
 	return nil
+}
+
+// placeable is every kind on the palette that has somewhere to go on the wall
+// as it stands.
+//
+// A Canvas square has nowhere to go on a wall of Shapes triangles, because
+// the two lines do not clip together. Working that out here lets the page
+// grey the panel out instead of leaving someone dragging something that will
+// not land.
+func (e *editor) placeable() []int {
+	out := make([]int, 0, len(e.kinds))
+	for _, kind := range e.kinds {
+		if len(e.wall().Spots(kind.Shape)) > 0 {
+			out = append(out, kind.Shape)
+		}
+	}
+	return out
 }
 
 // knownKind reports whether the palette offers this panel.

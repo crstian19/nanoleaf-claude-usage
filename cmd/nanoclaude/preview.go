@@ -128,11 +128,10 @@ func previewInBrowser(cmd *cobra.Command, shapeName string, rotation, port int, 
 	}
 
 	server, err := webui.New(ctx, webui.Options{
-		Shapes:    offered,
-		Rotation:  rotation,
-		Build:     buildableKinds(),
-		BuildSide: buildSide,
-		Port:      port,
+		Shapes:   offered,
+		Rotation: rotation,
+		Build:    buildableKinds(),
+		Port:     port,
 	})
 	if err != nil {
 		return err
@@ -166,24 +165,25 @@ func previewInBrowser(cmd *cobra.Command, shapeName string, rotation, port int, 
 	return o.Err()
 }
 
-// buildSide is the edge length of a wall built on the page.
-//
-// The Shapes panels all share it, which is what lets them click together, and
-// a device reports one length for a whole layout in any case.
-const buildSide = 134
-
 // buildableKinds are the panels a page may drop onto a wall it is building.
 //
-// The Shapes family only. They are the panels that genuinely interconnect:
-// triangles, hexagons and mini triangles share an edge length and are sold to
-// be mixed. Offering a Canvas square here would build a wall that cannot
-// exist, since a square is a different size and does not clip to a triangle.
-// A grid of squares is one of the samples instead.
+// Every panel in the range that is put together edge to edge, which leaves
+// out the Lines bars and the lightstrip: those join end to end at connectors,
+// at angles the connector decides.
+//
+// Mixing lines is not policed here and does not need to be. Each panel is
+// built at its own published edge length and only clips to its own product
+// line, so a Canvas square will not go on a Shapes triangle, and the page is
+// told why by the same words this list is written in.
 func buildableKinds() []webui.Kind {
 	return []webui.Kind{
-		{Shape: nanoleaf.ShapeTriangle, Label: "Triangle"},
-		{Shape: nanoleaf.ShapeHexagon, Label: "Hexagon"},
+		{Shape: nanoleaf.ShapeTriangle, Label: "Shapes triangle"},
+		{Shape: nanoleaf.ShapeHexagon, Label: "Shapes hexagon"},
 		{Shape: nanoleaf.ShapeMiniTriangle, Label: "Mini triangle"},
+		{Shape: nanoleaf.ShapeElementsHexagon, Label: "Elements hexagon"},
+		{Shape: nanoleaf.ShapeSquare, Label: "Canvas square"},
+		{Shape: nanoleaf.ShapeLightPanel, Label: "Light Panel"},
+		{Shape: nanoleaf.ShapeSkylight, Label: "Skylight panel"},
 	}
 }
 

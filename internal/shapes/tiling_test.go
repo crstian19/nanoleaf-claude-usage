@@ -43,6 +43,12 @@ func sharedCorners(a, b []render.Corner) int {
 // real device rather than something this package computed.
 func TestEverySampleTiles(t *testing.T) {
 	for _, sample := range All() {
+		if !sample.Tiles() {
+			// Lines, lightstrips and the corner-lit Elements
+			// hexagon are not walls of panels meeting edge to
+			// edge. What holds for them is checked below.
+			continue
+		}
 		t.Run(sample.Name, func(t *testing.T) {
 			wall := render.Project(sample.Layout, 0)
 			outliner := render.NewOutliner(wall)
@@ -94,4 +100,62 @@ func TestEverySampleTiles(t *testing.T) {
 func sameKind(o render.Outliner, a, b render.WallPanel) bool {
 	return o.Polygon(a.Panel.ShapeType).Sides == o.Polygon(b.Panel.ShapeType).Sides &&
 		o.Side(a.Panel.ShapeType) == o.Side(b.Panel.ShapeType)
+}
+
+// TestTheFiguresThatDoNotTileAreStillWhole covers the samples the rule above
+// cannot judge: a Lines zigzag, a lightstrip round a screen, and the Elements
+// hexagon that lights six corners.
+//
+// What they have to be is drawable and not on top of each other, which is all
+// "a wall" means for something joined at connectors.
+func TestTheFiguresThatDoNotTileAreStillWhole(t *testing.T) {
+	figures := 0
+	for _, sample := range All() {
+		if sample.Tiles() {
+			continue
+		}
+		figures++
+
+		t.Run(sample.Name, func(t *testing.T) {
+			wall := render.Project(sample.Layout, 0)
+			outliner := render.NewOutliner(wall)
+			usable, _ := wall.Lights()
+			if len(usable) < 3 {
+				t.Fatalf("the figure has %d panels that light", len(usable))
+			}
+
+			for i, panel := range usable {
+				corners := outliner.Outline(panel)
+				if len(corners) < 3 {
+					t.Errorf("panel %d is drawn with %d corners", panel.Panel.ID, len(corners))
+				}
+
+				// Every panel is near something: a figure is
+				// still one object.
+				near := false
+				for j, other := range usable {
+					if i == j {
+						continue
+					}
+					gap := math.Hypot(panel.X-other.X, panel.Y-other.Y)
+					reach := outliner.Polygon(panel.Panel.ShapeType).Radius +
+						outliner.Polygon(other.Panel.ShapeType).Radius
+					if gap < 1 {
+						t.Errorf("panels %d and %d are in the same place",
+							panel.Panel.ID, other.Panel.ID)
+					}
+					if gap <= reach*1.2 {
+						near = true
+					}
+				}
+				if !near {
+					t.Errorf("panel %d is off on its own", panel.Panel.ID)
+				}
+			}
+		})
+	}
+
+	if figures < 3 {
+		t.Errorf("only %d samples do not tile; the Lines, lightstrip and Elements corner figures should", figures)
+	}
 }

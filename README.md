@@ -62,7 +62,7 @@ statistical fit of the panel positions.
 
 The page is served on the loopback interface only, and the address opens once.
 It has to be passed to your browser, where other programs on the machine can
-read it, so a second visit is refused and you run the command again. The
+read it. So a second visit is refused, and you run the command again. The
 session stops when you close the tab.
 
 Add `--tui` to do the same job in the terminal with the arrow keys. That draws
@@ -82,23 +82,25 @@ nanoclaude preview --web                        # all of them, pick from the pag
 nanoclaude preview --shape hexagons-honeycomb   # one of them, in the terminal
 ```
 
-There are ten samples:
+The samples cover the whole Nanoleaf range:
 
-- Hexagons in a honeycomb, and hexagons in a zigzagging column.
-- A hexagon with hexagons and triangles around it, which Nanoleaf sells to be
-  mixed.
-- Canvas squares in a grid.
-- Triangles in a row, in a block, and in the zigzag this was written on.
-- Mini triangles, and a set with both sizes of triangle.
-- The original Light Panels, the triangles from the Aurora.
+- Shapes: triangles in a row, in a block and in the zigzag this was written
+  on, mini triangles, both sizes together, hexagons in a honeycomb, hexagons
+  in a column, and hexagons ringed with mini triangles.
+- Elements: hexagons in a honeycomb, and the hexagon that lights six corners.
+- Canvas: squares in a grid, with the control square and a passive one.
+- Light Panels: the Aurora triangles, with a Rhythm module.
+- Lines: five bars in a zigzag, with the connectors between them.
+- The 4D lightstrip, running round a screen.
+- Skylight: panels on a ceiling.
 
 Nothing is sent to a device in this mode, and nothing can be saved. It is
 safe to run while the display works.
 
 ### Build your own
 
-The last entry in the list is an empty wall. Drag a triangle, a hexagon or a
-mini triangle onto it, and it sticks to whichever edge you drop it on.
+The last entry in the list is an empty wall. Drag a panel onto it and it
+sticks to whichever edge you drop it on.
 
 Every place the panel can land is drawn while you drag, as the outline it
 would have there. Drop it on one of them and that is where it goes. An edge
@@ -106,9 +108,18 @@ that already has a panel on it will not take another, so panels can go on in
 any order. `Undo` and `Clear` go back, and one tick box turns a click into
 taking a panel off.
 
-Those three panels are the Shapes family, which all share an edge length and
-are sold to be mixed. Two mini triangles fit along one edge of a full one, so
-a mini gets two places on every edge.
+The palette holds every panel in the range that goes together edge to edge.
+Panels only clip to their own product line, and each is built at its own edge
+length. The ones with nowhere to go are greyed out as you build, so a Canvas
+square will not join a wall of Shapes triangles.
+
+The sizes are the published ones. A Shapes triangle has an edge of 134 and a
+hexagon 67. So two mini triangles fit along one triangle edge, and a hexagon
+sits on half of it.
+
+Lines and the lightstrip are not in the palette. They join end to end at
+connectors rather than edge to edge, at angles the connector decides, so
+there is a sample of each instead.
 
 Nothing here is worked out in the browser. The page asks where a panel could
 go, draws the answer, and says which edge you dropped it on. That way the
@@ -247,17 +258,25 @@ vertical axis 116 degrees out, and the gauge climbed diagonally.
 
 ### Panel models
 
-The device reports a shape number for every panel, and some shapes have no
-LEDs: the Shapes controller brick and the Rhythm module both appear in a
-layout like any other panel. Lighting one puts a dead spot in the middle of
-every frame, so they are left out.
+The device reports a shape number for every panel. All twenty numbers in
+Nanoleaf's documentation are named here, which is the whole range: Light
+Panels, Canvas, Shapes, Elements, Lines, the 4D lightstrip and Skylight.
 
-Only the shapes this version is sure about are named. Nanoleaf keeps
-releasing models, and an exhaustive list would be wrong within a year in the
-worst way: a real panel treated as a blank goes dark, and a blank treated as
-a panel does the same. So an unnamed shape is still rendered, and
-`nanoclaude layout` prints its number with a note. If it turns out to have no
-LEDs, put that number in `NANOCLAUDE_SKIP_SHAPES`.
+Each shape is drawn at its own published edge length. A Shapes triangle has
+an edge of 134 and a hexagon 67. Nanoleaf deprecated the single side length a
+device reports, because one number cannot describe a wall that holds two
+sizes.
+
+Five pieces have no LEDs: the Rhythm module, the Shapes controller, a Lines
+connector, a controller cap and a power connector. They appear in a layout
+like any other panel. Lighting one puts a dead spot in the middle of every
+frame, so they are left out.
+
+A shape number that is not in the list is still rendered, and
+`nanoclaude layout` prints it with a note. Getting this wrong either way is
+equally bad. A real panel treated as a blank goes dark, and a blank treated
+as a panel does the same. If a panel this version does not know turns out to
+have no LEDs, put its number in `NANOCLAUDE_SKIP_SHAPES`.
 
 ### Colors
 

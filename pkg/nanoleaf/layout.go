@@ -11,22 +11,41 @@ import (
 
 // Shape identifiers the device reports for each panel.
 //
-// Only the ones this package is confident about are named. Nanoleaf keeps
-// releasing models, so an exhaustive list would be wrong within a year, and
-// wrong in the worst way: a real panel treated as a blank leaves a dead spot
-// in the middle of the display, and a blank treated as a panel does the same.
-// Anything unnamed is rendered and reported by the layout command, so a
-// person with a newer model can see the number and skip it themselves.
+// The list is Nanoleaf's own, from the layout section of their Open API
+// documentation, and it covers the range: Light Panels, Rhythm, Canvas,
+// Shapes, Elements, Lines, the 4D lightstrip and Skylight. Numbers 5, 6, 10,
+// 11 and 13 are not in it, and 21 to 28 are not either.
+//
+// Getting one wrong is worse than not knowing it: a real panel treated as a
+// blank leaves a dead spot in the middle of the display, and a blank treated
+// as a panel does the same. Anything unnamed is still rendered and is
+// reported by the layout command, so a person with a model newer than this
+// list can see the number and skip it themselves.
 const (
 	ShapeLightPanel    = 0  // the original triangles, Light Panels and Aurora
 	ShapeRhythm        = 1  // the Rhythm music module: no LEDs
 	ShapeSquare        = 2  // Canvas
 	ShapeSquareMaster  = 3  // the Canvas square with the controller in it
-	ShapeSquarePassive = 4  // a blank Canvas square
+	ShapeSquarePassive = 4  // a Canvas square in passive mode
 	ShapeHexagon       = 7  // Shapes
 	ShapeTriangle      = 8  // Shapes
 	ShapeMiniTriangle  = 9  // Shapes
 	ShapeController    = 12 // the Shapes controller brick: no LEDs
+
+	ShapeElementsHexagon = 14 // Elements, the wood-look hexagons
+	ShapeElementsCorner  = 15 // one Elements hexagon reports six of these
+
+	ShapeLinesConnector  = 16 // the hinge between two Lines bars: no LEDs
+	ShapeLines           = 17 // a Lines bar
+	ShapeLinesSingleZone = 18 // a Lines bar that reports its two halves
+	ShapeControllerCap   = 19 // the cap on a Lines controller: no LEDs
+	ShapePowerConnector  = 20 // where the power goes in: no LEDs
+
+	ShapeLightstrip4D = 29 // a segment of the 4D lightstrip
+
+	ShapeSkylight        = 30 // a Skylight ceiling panel
+	ShapeSkylightPrimary = 31 // the Skylight panel with the controller in it
+	ShapeSkylightPassive = 32 // a Skylight panel in passive mode
 )
 
 // blankShapes are the shapes known to have no LEDs. They appear in the layout
@@ -36,8 +55,11 @@ const (
 // a wrong entry here is as damaging as a missing one, and SkipShapes exists
 // for the models it does not know.
 var blankShapes = map[int]bool{
-	ShapeRhythm:     true,
-	ShapeController: true,
+	ShapeRhythm:         true,
+	ShapeController:     true,
+	ShapeLinesConnector: true,
+	ShapeControllerCap:  true,
+	ShapePowerConnector: true,
 }
 
 // SkipShapes adds shape identifiers to treat as blanks, for a device whose
@@ -81,7 +103,7 @@ func ShapeName(t int) string {
 	case ShapeSquareMaster:
 		return "square (controller)"
 	case ShapeSquarePassive:
-		return "square (blank)"
+		return "square (passive)"
 	case ShapeHexagon:
 		return "hexagon"
 	case ShapeTriangle:
@@ -90,8 +112,72 @@ func ShapeName(t int) string {
 		return "mini triangle"
 	case ShapeController:
 		return "controller"
+	case ShapeElementsHexagon:
+		return "elements hexagon"
+	case ShapeElementsCorner:
+		return "elements hexagon corner"
+	case ShapeLinesConnector:
+		return "lines connector"
+	case ShapeLines:
+		return "lines bar"
+	case ShapeLinesSingleZone:
+		return "lines bar (half)"
+	case ShapeControllerCap:
+		return "controller cap"
+	case ShapePowerConnector:
+		return "power connector"
+	case ShapeLightstrip4D:
+		return "4d lightstrip"
+	case ShapeSkylight:
+		return "skylight panel"
+	case ShapeSkylightPrimary:
+		return "skylight panel (controller)"
+	case ShapeSkylightPassive:
+		return "skylight panel (passive)"
 	default:
 		return fmt.Sprintf("unknown (type %d)", t)
+	}
+}
+
+// Family is the product line a shape belongs to.
+//
+// It matters because panels only clip to panels of their own line. Two shapes
+// can have the same edge length by coincidence -- an Elements hexagon and a
+// Shapes triangle are both 134 -- and a wall that mixed them would look
+// possible while being impossible to build.
+type Family string
+
+// The product lines, in the order Nanoleaf released them.
+const (
+	FamilyUnknown    Family = "unknown"
+	FamilyLightPanel Family = "light panels"
+	FamilyCanvas     Family = "canvas"
+	FamilyShapes     Family = "shapes"
+	FamilyElements   Family = "elements"
+	FamilyLines      Family = "lines"
+	Family4D         Family = "4d"
+	FamilySkylight   Family = "skylight"
+)
+
+// FamilyOf reports which product line a shape belongs to.
+func FamilyOf(t int) Family {
+	switch t {
+	case ShapeLightPanel, ShapeRhythm:
+		return FamilyLightPanel
+	case ShapeSquare, ShapeSquareMaster, ShapeSquarePassive:
+		return FamilyCanvas
+	case ShapeHexagon, ShapeTriangle, ShapeMiniTriangle, ShapeController:
+		return FamilyShapes
+	case ShapeElementsHexagon, ShapeElementsCorner:
+		return FamilyElements
+	case ShapeLinesConnector, ShapeLines, ShapeLinesSingleZone, ShapeControllerCap, ShapePowerConnector:
+		return FamilyLines
+	case ShapeLightstrip4D:
+		return Family4D
+	case ShapeSkylight, ShapeSkylightPrimary, ShapeSkylightPassive:
+		return FamilySkylight
+	default:
+		return FamilyUnknown
 	}
 }
 
