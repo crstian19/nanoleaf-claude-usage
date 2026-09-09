@@ -100,3 +100,57 @@ func parseEnvLine(raw string) (key, value string, ok bool) {
 	}
 	return key, value, true
 }
+
+// Setting is one line of the configuration file.
+type Setting struct {
+	Key, Value string
+	// Comment goes above the line, without the leading hash.
+	Comment string
+}
+
+// WriteConfigFile writes settings to path, replacing whatever is there.
+//
+// The file holds tokens, so it is created with owner-only permissions and
+// written atomically. It is also read by systemd when the daemon runs as a
+// unit, which is why the format is bare KEY=value with no quoting and no
+// export: a file that behaved differently depending on who read it would be
+// worse than either format alone.
+func WriteConfigFile(path string, settings []Setting) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("daemon: create config directory: %w", err)
+	}
+
+	var b strings.Builder
+	b.WriteString("# Written by `nanoclaude setup`.\n")
+	b.WriteString("# Format is systemd EnvironmentFile: bare KEY=value, no export, no quotes.\n")
+	for _, s := range settings {
+		b.WriteString("\n")
+		if s.Comment != "" {
+			b.WriteString("# " + s.Comment + "\n")
+		}
+		b.WriteString(s.Key + "=" + s.Value + "\n")
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".env-*")
+	if err != nil {
+		return fmt.Errorf("daemon: create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("daemon: chmod temp file: %w", err)
+	}
+	if _, err := tmp.WriteString(b.String()); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("daemon: write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("daemon: close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("daemon: install config: %w", err)
+	}
+	return nil
+}

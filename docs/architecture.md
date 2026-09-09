@@ -400,3 +400,6 @@ sandbox. Set `NANOCLAUDE_IDLE_EXIT=0` there.
 | `internal/hass` | Read-only Home Assistant client, scoped to the one entity this needs. |
 | `internal/render` | Geometry and colour. No I/O, which is why it is the best-tested package. `FromLayout` is the only conversion production code should use — it also drops panels whose ID will not fit the protocol's 16-bit field, since one bad ID makes the device reject every frame whole. |
 | `internal/daemon` | Wiring and the loop. |
+| `internal/discover` | Sweeps the local networks for controllers. Scans rather than using mDNS, because reaching an mDNS advert needs a resolver running locally and that is not a safe assumption: on the machine this was written on, avahi-daemon was stopped while the panels answered fine. A /24 takes under a second. |
+| `internal/hooks` | Registers the Claude Code hooks. Edits `settings.json` in place with a JSON path library rather than decoding and re-encoding it, because Go marshals a map with its keys sorted and the file is hand-maintained: a re-encode would reshuffle 26 KB of configuration to add nine entries. |
+| `internal/ui` | The shared styles, and the check for whether output is a terminal. Every live view has a plain counterpart, because a progress bar written to a pipe is a stream of escape codes. |

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -46,83 +47,7 @@ func newCalibrateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			layout, err := client.Layout(ctx)
-			if err != nil {
-				return err
-			}
-			geo, _ := render.FromLayout(layout, rotation)
-			if len(geo.Points) == 0 {
-				return fmt.Errorf("calibrate: no renderable panels")
-			}
-
-			// Saved before the stream is opened, so the panels can be
-			// put back the way they were found.
-			saved, err := client.State(ctx)
-			if err != nil {
-				return err
-			}
-
-			frame := make(nanoleaf.Frame, len(geo.Points))
-			var bottom, middle, top int
-			for _, p := range geo.Points {
-				switch {
-				case p.V < 0.34:
-					frame[p.PanelID] = calibrateBottom
-					bottom++
-				case p.V > 0.66:
-					frame[p.PanelID] = calibrateTop
-					top++
-				default:
-					frame[p.PanelID] = calibrateMiddle
-					middle++
-				}
-			}
-
-			o := newOut(cmd.OutOrStdout())
-			o.printf("global orientation %d deg + extra rotation %d deg\n",
-				layout.GlobalOrientation, rotation)
-			o.printf("painting %d panels GREEN (bottom), %d BLUE (middle), %d RED (top)\n",
-				bottom, middle, top)
-			o.printf("holding for %s -- look at the wall\n", hold)
-			if err := o.Err(); err != nil {
-				return err
-			}
-
-			// Streaming to powered-off panels shows nothing, so the
-			// pattern would be invisible and look like a bug. restore
-			// puts the power back as it was.
-			if !saved.On {
-				if err := client.SetOn(ctx, true); err != nil {
-					return err
-				}
-			}
-
-			stream, err := client.OpenStream(ctx, 200*time.Millisecond)
-			if err != nil {
-				return err
-			}
-			defer restore(client, stream, saved)
-
-			// Resent periodically: a single frame is enough for the
-			// panels, but repeating keeps the picture up if a packet
-			// is lost, and lets the hold be interrupted promptly.
-			tick := time.NewTicker(time.Second)
-			defer tick.Stop()
-
-			deadline := time.After(hold)
-			for {
-				if err := stream.Send(frame); err != nil {
-					return err
-				}
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-deadline:
-					return nil
-				case <-tick.C:
-				}
-			}
+			return calibrate(ctx, cmd.OutOrStdout(), client, rotation, hold)
 		},
 	}
 
@@ -130,6 +55,94 @@ func newCalibrateCmd() *cobra.Command {
 		"extra rotation in degrees, added to the layout's global orientation")
 	cmd.Flags().DurationVar(&hold, "hold", 30*time.Second, "how long to hold the pattern")
 	return cmd
+}
+
+// runCalibration paints the pattern for a client built from an address and a
+// token, for callers that do not have the environment set up yet.
+func runCalibration(ctx context.Context, host, token string, hold time.Duration) error {
+	return calibrate(ctx, io.Discard, nanoleaf.New(host, token), 0, hold)
+}
+
+// calibrate paints the orientation pattern and holds it.
+func calibrate(ctx context.Context, w io.Writer, client *nanoleaf.Client, rotation int, hold time.Duration) error {
+	{
+		layout, err := client.Layout(ctx)
+		if err != nil {
+			return err
+		}
+		geo, _ := render.FromLayout(layout, rotation)
+		if len(geo.Points) == 0 {
+			return fmt.Errorf("calibrate: no renderable panels")
+		}
+
+		// Saved before the stream is opened, so the panels can be
+		// put back the way they were found.
+		saved, err := client.State(ctx)
+		if err != nil {
+			return err
+		}
+
+		frame := make(nanoleaf.Frame, len(geo.Points))
+		var bottom, middle, top int
+		for _, p := range geo.Points {
+			switch {
+			case p.V < 0.34:
+				frame[p.PanelID] = calibrateBottom
+				bottom++
+			case p.V > 0.66:
+				frame[p.PanelID] = calibrateTop
+				top++
+			default:
+				frame[p.PanelID] = calibrateMiddle
+				middle++
+			}
+		}
+
+		o := newOut(w)
+		o.printf("global orientation %d deg + extra rotation %d deg\n",
+			layout.GlobalOrientation, rotation)
+		o.printf("painting %d panels GREEN (bottom), %d BLUE (middle), %d RED (top)\n",
+			bottom, middle, top)
+		o.printf("holding for %s -- look at the wall\n", hold)
+		if err := o.Err(); err != nil {
+			return err
+		}
+
+		// Streaming to powered-off panels shows nothing, so the
+		// pattern would be invisible and look like a bug. restore
+		// puts the power back as it was.
+		if !saved.On {
+			if err := client.SetOn(ctx, true); err != nil {
+				return err
+			}
+		}
+
+		stream, err := client.OpenStream(ctx, 200*time.Millisecond)
+		if err != nil {
+			return err
+		}
+		defer restore(client, stream, saved)
+
+		// Resent periodically: a single frame is enough for the
+		// panels, but repeating keeps the picture up if a packet
+		// is lost, and lets the hold be interrupted promptly.
+		tick := time.NewTicker(time.Second)
+		defer tick.Stop()
+
+		deadline := time.After(hold)
+		for {
+			if err := stream.Send(frame); err != nil {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-deadline:
+				return nil
+			case <-tick.C:
+			}
+		}
+	}
 }
 
 // restore hands the panels back, on a context of its own because the

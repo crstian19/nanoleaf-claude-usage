@@ -37,20 +37,25 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "nanoclaude",
 		Short: "Show Claude Code usage on Nanoleaf panels",
-		Long: "nanoclaude renders Claude Code token usage onto Nanoleaf panels.\n\n" +
-			"The five-hour usage window fills the mounted shape from the bottom up,\n" +
-			"coloured green through red as it fills, and a pulse travels along the\n" +
-			"shape while Claude is working.",
+		Long: "nanoclaude shows how much of your Claude Code session you have used,\n" +
+			"on a wall of Nanoleaf panels.\n\n" +
+			"Each panel owns an equal share of the allowance. A panel lights up when\n" +
+			"you spend its share, and its colour says where it sits on the scale.\n" +
+			"While Claude works, every panel turns into a rainbow.\n\n" +
+			"Start with `nanoclaude setup`.",
 		SilenceUsage: true,
 	}
 
 	root.AddCommand(
+		newSetupCmd(),
 		newRunCmd(),
 		newPairCmd(),
+		newDiscoverCmd(),
 		newLayoutCmd(),
 		newCalibrateCmd(),
 		newPreviewCmd(),
 		newHookCmd(),
+		newHooksCmd(),
 		newUpCmd(),
 		newDownCmd(),
 		newStatusCmd(),

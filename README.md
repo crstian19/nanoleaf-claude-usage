@@ -23,69 +23,63 @@ row or a grid.
 ## Install
 
 ```sh
-just install
+go install github.com/crstian19/nanoleaf-claude-usage/cmd/nanoclaude@latest
+nanoclaude setup
 ```
 
-This builds the binary and copies it to `~/.local/bin`.
+`setup` does the whole job. It finds the panels on your network and pairs with
+them. Then it writes the configuration file, checks that the shape is the
+right way up, and installs the Claude Code hooks that start the display.
 
-Next, pair with the panels. Hold the power button on the controller for 5 to 7
-seconds, until the LEDs flash. Then run:
+Every step is also a command of its own, so you can do any of them by hand:
 
 ```sh
-nanoclaude pair --host 192.168.1.50
+nanoclaude discover                  # find the panels
+nanoclaude pair --host 192.168.1.50  # get a token
+nanoclaude calibrate                 # check which way the shape is mounted
+nanoclaude hooks install             # let Claude Code start the display
 ```
 
-The panels hold several tokens at once, so this does not revoke access for
-Home Assistant or for the Nanoleaf app.
+`discover` scans your own networks for the Nanoleaf API port. It does not use
+mDNS, because reaching an mDNS advert needs a resolver running on the machine,
+and that is not a safe assumption. A sweep of a /24 takes under a second.
 
-Now write the configuration file:
+To pair, hold the power button on the controller for 5 to 7 seconds, until the
+LEDs flash. The panels hold several tokens at once, so this does not revoke
+access for Home Assistant or for the Nanoleaf app.
 
-```sh
-mkdir -p ~/.config/nanoclaude
-cp deploy/env.example ~/.config/nanoclaude/env
-chmod 600 ~/.config/nanoclaude/env
-$EDITOR ~/.config/nanoclaude/env
-```
+`calibrate` lights the bottom of the shape green and the top red. The panels
+report where they are, but nothing tells them which way is up on your wall, so
+look at the wall. If green is not at the bottom, set `NANOCLAUDE_ROTATION` to
+the difference in degrees.
 
-Make sure that the shape is the right way up. This lights the bottom of the
-shape green and the top red:
-
-```sh
-nanoclaude calibrate
-```
-
-If green is not at the bottom, set `NANOCLAUDE_ROTATION` to the difference in
-degrees and run it again.
-
-Last, let Claude Code start the display for you:
-
-```sh
-python3 deploy/install-hooks.py --dry-run
-python3 deploy/install-hooks.py
-```
-
-The script appends to `~/.claude/settings.json`. It keeps every hook that is
-already there, and it writes a backup first.
+`hooks install` writes to `~/.claude/settings.json`. It keeps every hook that
+is already there and it writes a backup first. It also edits the file in
+place, so keys it does not touch keep their order. Run it again after an
+upgrade and it changes nothing.
 
 ## Usage
 
 There is no service to enable and nothing to add to a startup file. Claude
-Code starts the display. The `SessionStart` hook starts it. Every other hook brings it
-back if it stopped. It shuts itself down after 20 minutes with no live
-session.
+Code starts the display. The `SessionStart` hook starts it. Every other hook
+brings it back if it stopped. It shuts itself down after 20 minutes with no
+live session.
 
 You can also control it by hand:
 
 | Command | What it does |
 |---|---|
+| `nanoclaude setup` | Set everything up, start to finish |
 | `nanoclaude up` | Start it in the background, if it does not run already |
 | `nanoclaude down` | Stop it and give the panels back |
 | `nanoclaude status` | Report whether it runs, and where the log is |
 | `nanoclaude run` | Run it in the foreground |
-| `nanoclaude calibrate` | Light the panels to make sure that the shape is the right way up |
+| `nanoclaude discover` | Find Nanoleaf controllers on this network |
+| `nanoclaude pair` | Get an API token from panels in pairing mode |
+| `nanoclaude calibrate` | Light the panels to check the mounted shape |
 | `nanoclaude layout` | Print the panel positions and the scene coordinates |
 | `nanoclaude preview` | Draw a scene in the terminal, without touching the panels |
-| `nanoclaude pair` | Get an API token from panels in pairing mode |
+| `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |
 
 `nanoclaude preview` runs without a device. It falls back to a stand-in shape
 of nine panels, which is useful to adjust the look:
@@ -94,6 +88,10 @@ of nine panels, which is useful to adjust the look:
 nanoclaude preview --budget 0.85 --phase tool --animate 8s
 ```
 
+Every command that draws a live view also has a plain form. A progress bar
+written to a pipe is a stream of escape codes. The program asks whether the
+output is a terminal, and prints one line instead.
+
 The daemon gives the panels back when it stops. It restores the effect, the
 brightness, and the power state that it found.
 
@@ -101,7 +99,8 @@ brightness, and the power state that it found.
 
 The daemon reads its own configuration file at `~/.config/nanoclaude/env`. It
 does this because a Claude Code hook starts it, and that hook knows nothing
-about panels or tokens. See `deploy/env.example`.
+about panels or tokens. `nanoclaude setup` writes the file, and the variables
+below are all it understands.
 
 | Variable | What it sets |
 |---|---|
