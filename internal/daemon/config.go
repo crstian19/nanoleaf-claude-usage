@@ -25,7 +25,6 @@ const (
 	EnvLimitsEvery   = "NANOCLAUDE_LIMITS_EVERY"
 	EnvLimitsCache   = "NANOCLAUDE_LIMITS_CACHE"
 	EnvIdleExit      = "NANOCLAUDE_IDLE_EXIT"
-	EnvBrightness    = "NANOCLAUDE_BRIGHTNESS"
 	EnvFPS           = "NANOCLAUDE_FPS"
 	EnvRotation      = "NANOCLAUDE_ROTATION"
 )
@@ -40,15 +39,6 @@ const (
 	// DefaultToggleEntity is the Home Assistant switch that arms the
 	// display.
 	DefaultToggleEntity = "input_boolean.claude_display"
-
-	// DefaultBrightness is what the device's global brightness is set to
-	// while the display owns it.
-	//
-	// Full, because every colour sent over the wire is scaled by it: a
-	// device left at 50 halves the entire display, and a gauge calibrated
-	// in bytes then means nothing. Owning it is the only way the rendering
-	// work means what it says.
-	DefaultBrightness = 100
 
 	// DefaultIdleExit is how long the daemon stays up with no session.
 	//
@@ -150,7 +140,13 @@ var (
 	ErrNoDevice = errors.New("daemon: no Nanoleaf device configured")
 )
 
-// LeafFromEnv builds a Nanoleaf client from the environment.
+// LeafFromEnv builds a Nanoleaf client from the configuration.
+//
+// It loads the configuration file first, exactly as the daemon does. Without
+// that, every command except `run` failed straight after `setup` had written
+// the file, because only the daemon was reading it: a person would have had
+// to export the variables by hand, which defeats having written the file at
+// all.
 //
 // It exists so the subcommands that talk to the device without running the
 // loop do not each re-implement a slice of ConfigFromEnv's validation. A
@@ -158,6 +154,14 @@ var (
 // treat as "no device available" rather than a failure; a half-configured one
 // is a real error, so a mistyped variable is never mistaken for absence.
 func LeafFromEnv() (*nanoleaf.Client, error) {
+	path, err := ConfigFilePath()
+	if err != nil {
+		return nil, err
+	}
+	if err := LoadConfigFile(path); err != nil {
+		return nil, err
+	}
+
 	host := os.Getenv(EnvNanoleafHost)
 	token := os.Getenv(EnvNanoleafToken)
 
@@ -195,10 +199,6 @@ type Config struct {
 	LimitsEvery time.Duration
 
 	FPS int
-
-	// Brightness is the device's global brightness while the display owns
-	// it, 0-100. The user's own value is restored on release.
-	Brightness int
 
 	// IdleExit is how long to keep running with no live Claude Code
 	// session before standing down. Zero keeps the daemon up for good.
@@ -289,15 +289,6 @@ func configFromEnvOnly() (Config, error) {
 			return Config{}, err
 		}
 		cfg.LimitsCache = path
-	}
-
-	cfg.Brightness = DefaultBrightness
-	if raw := os.Getenv(EnvBrightness); raw != "" {
-		v, err := strconv.Atoi(raw)
-		if err != nil || v < 1 || v > 100 {
-			return Config{}, fmt.Errorf("daemon: %s must be between 1 and 100, got %q", EnvBrightness, raw)
-		}
-		cfg.Brightness = v
 	}
 
 	cfg.IdleExit = DefaultIdleExit

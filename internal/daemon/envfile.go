@@ -116,10 +116,6 @@ type Setting struct {
 // export: a file that behaved differently depending on who read it would be
 // worse than either format alone.
 func WriteConfigFile(path string, settings []Setting) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("daemon: create config directory: %w", err)
-	}
-
 	var b strings.Builder
 	b.WriteString("# Written by `nanoclaude setup`.\n")
 	b.WriteString("# Format is systemd EnvironmentFile: bare KEY=value, no export, no quotes.\n")
@@ -143,6 +139,68 @@ func WriteConfigFile(path string, settings []Setting) error {
 		return fmt.Errorf("daemon: chmod temp file: %w", err)
 	}
 	if _, err := tmp.WriteString(b.String()); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("daemon: write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("daemon: close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("daemon: install config: %w", err)
+	}
+	return nil
+}
+
+// SetConfigValue writes one setting, leaving the rest of the file alone.
+//
+// Line based rather than parse-and-rewrite, for the same reason the hooks
+// installer edits JSON in place: the file is meant to be read and edited by
+// hand, and rewriting it to change one value would lose the comments and the
+// order a person put there.
+func SetConfigValue(path, key, value string) error {
+	existing, err := os.ReadFile(path) //nolint:gosec // the user's own config file
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("daemon: read config: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(string(existing), "\n"), "\n")
+	replaced := false
+	for i, line := range lines {
+		k, _, ok := parseEnvLine(line)
+		if ok && k == key {
+			lines[i] = key + "=" + value
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		lines = append(lines, "", key+"="+value)
+	}
+
+	body := strings.Join(lines, "\n") + "\n"
+	return writeFileAtomic(path, []byte(body))
+}
+
+// writeFileAtomic replaces a file's contents in one step, with owner-only
+// permissions. The file holds tokens, and a crash halfway through a plain
+// write would leave the daemon with half a configuration.
+func writeFileAtomic(path string, body []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("daemon: create config directory: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".env-*")
+	if err != nil {
+		return fmt.Errorf("daemon: create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("daemon: chmod temp file: %w", err)
+	}
+	if _, err := tmp.Write(body); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("daemon: write temp file: %w", err)
 	}

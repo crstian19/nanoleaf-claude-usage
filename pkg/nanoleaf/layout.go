@@ -140,11 +140,13 @@ type State struct {
 	On bool
 	// Brightness is the device's global brightness, 0-100.
 	//
-	// It has to be owned rather than left alone, which was the original
-	// mistake here. Every colour sent over the wire is scaled by it, so a
-	// device sitting at 50 halves the whole display -- and a carefully
-	// calibrated gauge multiplied by a number set months ago in a phone
-	// app is not calibrated at all.
+	// Read but never written by the display. Every colour sent over the
+	// wire is scaled by it, so it is tempting to take it over and get a
+	// predictable canvas. That was tried and it was wrong: the value
+	// belongs to whoever set it, in the Nanoleaf app or in a home
+	// automation, and a daemon that restarts whenever a session starts
+	// would overwrite that choice several times an hour. See the
+	// brightness command for setting it on purpose.
 	Brightness int
 	// Effect is the selected effect's name, which may be one of the
 	// device's pseudo-effects -- see Restorable.

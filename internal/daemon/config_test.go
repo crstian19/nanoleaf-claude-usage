@@ -68,22 +68,6 @@ func TestConfigFromEnv(t *testing.T) {
 			},
 		},
 		{
-			name: "brightness out of range is rejected",
-			env: map[string]string{
-				EnvNanoleafHost: "10.0.0.5", EnvNanoleafToken: "tok", EnvBrightness: "0",
-			},
-			wantErr: true,
-		},
-		{
-			name: "brightness defaults to full",
-			env:  map[string]string{EnvNanoleafHost: "10.0.0.5", EnvNanoleafToken: "tok"},
-			check: func(t *testing.T, c Config) {
-				if c.Brightness != DefaultBrightness {
-					t.Errorf("brightness = %d, want %d", c.Brightness, DefaultBrightness)
-				}
-			},
-		},
-		{
 			name: "fps out of range is rejected",
 			env: map[string]string{
 				EnvNanoleafHost: "10.0.0.5", EnvNanoleafToken: "tok", EnvFPS: "0",
@@ -193,7 +177,7 @@ func TestConfigFromEnv(t *testing.T) {
 				EnvNanoleafHost, EnvNanoleafToken, EnvHassServer,
 				EnvHassToken, EnvToggleEntity, EnvCeilingCost, EnvFPS,
 				EnvRotation, EnvLimits, EnvLimitsEvery, EnvLimitsCache,
-				EnvIdleExit, EnvBrightness,
+				EnvIdleExit,
 			} {
 				t.Setenv(k, "")
 			}
@@ -227,7 +211,12 @@ func TestFrameInterval(t *testing.T) {
 
 // TestLeafFromEnv covers the distinction the preview command depends on:
 // nothing configured is a normal state, half configured is a mistake.
+//
+// XDG_CONFIG_HOME points at an empty directory because LeafFromEnv loads the
+// configuration file, and the machine running the tests has a real one.
 func TestLeafFromEnv(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	t.Run("nothing configured", func(t *testing.T) {
 		t.Setenv(EnvNanoleafHost, "")
 		t.Setenv(EnvNanoleafToken, "")

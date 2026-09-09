@@ -80,6 +80,7 @@ You can also control it by hand:
 | `nanoclaude layout` | Print the panel positions and the scene coordinates |
 | `nanoclaude preview` | Draw a scene in the terminal, without touching the panels |
 | `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |
+| `nanoclaude brightness` | Report or set the panels' global brightness |
 
 `nanoclaude preview` runs without a device. It falls back to a stand-in shape
 of nine panels, which is useful to adjust the look:
@@ -92,8 +93,15 @@ Every command that draws a live view also has a plain form. A progress bar
 written to a pipe is a stream of escape codes. The program asks whether the
 output is a terminal, and prints one line instead.
 
-The daemon gives the panels back when it stops. It restores the effect, the
-brightness, and the power state that it found.
+The daemon gives the panels back when it stops. It restores the effect and the
+power state that it found.
+
+It never changes the panels' global brightness. Every colour it sends is
+scaled by that value, so taking it over would give a predictable canvas, and
+that was tried and reverted: the value belongs to whoever set it, in the
+Nanoleaf app or in a home automation, and a daemon that restarts with every
+session would overwrite that choice several times an hour. Use
+`nanoclaude brightness` to set it on purpose.
 
 ## Configuration
 
@@ -112,7 +120,6 @@ below are all it understands.
 | `NANOCLAUDE_LIMITS_CACHE` | Path of the status line cache, for `cache` mode. |
 | `NANOCLAUDE_CEILING_COST` | Cost of a full session, in dollars. |
 | `NANOCLAUDE_ROTATION` | Extra rotation in degrees. See `nanoclaude calibrate`. |
-| `NANOCLAUDE_BRIGHTNESS` | Device brightness while the display owns it. |
 | `NANOCLAUDE_IDLE_EXIT` | Time with no session before it shuts down. `0` never. |
 | `NANOCLAUDE_FPS` | Frame rate, from 1 to 60. |
 

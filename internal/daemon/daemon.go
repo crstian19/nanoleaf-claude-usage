@@ -357,13 +357,6 @@ func (l *loop) takeOver(ctx context.Context) bool {
 		return false
 	}
 	l.stream = stream
-
-	// Take the global brightness too. Not doing so was a real fault: every
-	// colour is scaled by it, so a device left at half brightness halved a
-	// display whose contrast had been calibrated byte by byte.
-	if err := l.d.leaf.SetBrightness(ctx, l.d.cfg.Brightness); err != nil {
-		l.d.log.Warn("could not set brightness", "err", err)
-	}
 	l.d.log.Info("streaming", "fps", l.d.cfg.FPS)
 	return true
 }
@@ -381,14 +374,6 @@ func (l *loop) release() {
 	// handing the panels back is exactly the work that must still happen.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	// Brightness first, so the restored effect appears at the level the
-	// user had it rather than at whatever the display was using.
-	if l.saved.Brightness > 0 {
-		if err := l.d.leaf.SetBrightness(ctx, l.saved.Brightness); err != nil {
-			l.d.log.Warn("could not restore brightness", "brightness", l.saved.Brightness, "err", err)
-		}
-	}
 
 	if l.saved.Restorable() {
 		if err := l.d.leaf.SelectEffect(ctx, l.saved.Effect); err != nil {

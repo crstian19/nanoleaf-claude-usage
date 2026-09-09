@@ -186,9 +186,16 @@ A wall light must never be able to interrupt a coding session.
 ## Handing the panels back
 
 The daemon saves the device's power state and selected effect before it
-streams anything, and restores them when disarmed or shut down. Brightness is
-deliberately not in that set: nothing here changes it, so there is nothing to
-restore.
+streams anything, and restores them when disarmed or shut down.
+
+Brightness is deliberately not in that set, and this went the wrong way once.
+Every colour sent over the wire is scaled by the device's global brightness,
+so a device left at 50 halves a display whose contrast was calibrated byte by
+byte, and taking the value over looked like the obvious fix. It is not. That
+value belongs to whoever set it, in the Nanoleaf app or in a home automation,
+and the daemon stands down when idle and restarts on the next hook: in one
+afternoon it had forced the brightness to full 22 times. The `brightness`
+command sets it when that is actually what someone wants.
 
 It re-reads that state at each take-over, so a change made by hand while
 disarmed is preserved rather than clobbered — but only if the saved effect is
