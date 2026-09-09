@@ -9,13 +9,43 @@ import (
 	"strings"
 )
 
-// Shape identifiers reported by the device for each panel. Only the ones we
-// care about telling apart are named.
+// Shape identifiers the device reports for each panel.
+//
+// Only the ones this package is confident about are named. Nanoleaf keeps
+// releasing models, so an exhaustive list would be wrong within a year, and
+// wrong in the worst way: a real panel treated as a blank leaves a dead spot
+// in the middle of the display, and a blank treated as a panel does the same.
+// Anything unnamed is rendered and reported by the layout command, so a
+// person with a newer model can see the number and skip it themselves.
 const (
-	ShapeTriangle     = 8
-	ShapeMiniTriangle = 9
-	ShapeController   = 12
+	ShapeLightPanel    = 0  // the original triangles, Light Panels and Aurora
+	ShapeRhythm        = 1  // the Rhythm music module: no LEDs
+	ShapeSquare        = 2  // Canvas
+	ShapeSquareMaster  = 3  // the Canvas square with the controller in it
+	ShapeSquarePassive = 4  // a blank Canvas square
+	ShapeHexagon       = 7  // Shapes
+	ShapeTriangle      = 8  // Shapes
+	ShapeMiniTriangle  = 9  // Shapes
+	ShapeController    = 12 // the Shapes controller brick: no LEDs
 )
+
+// blankShapes are the shapes known to have no LEDs. They appear in the layout
+// like any other panel, and lighting them would put a hole in every frame.
+//
+// Deliberately short. Only the two this package is sure about are listed:
+// a wrong entry here is as damaging as a missing one, and SkipShapes exists
+// for the models it does not know.
+var blankShapes = map[int]bool{
+	ShapeRhythm:     true,
+	ShapeController: true,
+}
+
+// SkipShapes adds shape identifiers to treat as blanks, for a device whose
+// model this package does not know. Set it before reading a layout.
+//
+// `nanoclaude layout` prints the identifier of every panel, so the number to
+// put here is visible without guessing.
+var SkipShapes = map[int]bool{}
 
 // Panel is one physical light panel and where it sits on the wall.
 //
@@ -30,10 +60,45 @@ type Panel struct {
 	ShapeType   int `json:"shapeType"`
 }
 
-// IsLight reports whether the panel actually emits light. The controller
-// brick shows up in the layout as a panel but has no LEDs, and including it
-// would put a dead spot in the middle of any rendered scene.
-func (p Panel) IsLight() bool { return p.ShapeType != ShapeController }
+// IsLight reports whether the panel actually emits light.
+//
+// The controller brick and the Rhythm module show up in a layout like any
+// other panel and have no LEDs, so lighting them would put a dead spot in the
+// middle of every frame.
+func (p Panel) IsLight() bool {
+	return !blankShapes[p.ShapeType] && !SkipShapes[p.ShapeType]
+}
+
+// ShapeName names a shape identifier, or reports it as unknown.
+func ShapeName(t int) string {
+	switch t {
+	case ShapeLightPanel:
+		return "light panel"
+	case ShapeRhythm:
+		return "rhythm module"
+	case ShapeSquare:
+		return "square"
+	case ShapeSquareMaster:
+		return "square (controller)"
+	case ShapeSquarePassive:
+		return "square (blank)"
+	case ShapeHexagon:
+		return "hexagon"
+	case ShapeTriangle:
+		return "triangle"
+	case ShapeMiniTriangle:
+		return "mini triangle"
+	case ShapeController:
+		return "controller"
+	default:
+		return fmt.Sprintf("unknown (type %d)", t)
+	}
+}
+
+// IsKnownShape reports whether the identifier is one this package names.
+func IsKnownShape(t int) bool {
+	return !strings.HasPrefix(ShapeName(t), "unknown")
+}
 
 // Addressable reports whether the panel's ID fits the wire format's 16-bit
 // panel field.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/crstian19/nanoleaf-claude-usage/internal/daemon"
 	"github.com/crstian19/nanoleaf-claude-usage/internal/render"
+	"github.com/crstian19/nanoleaf-claude-usage/internal/ui"
 	"github.com/crstian19/nanoleaf-claude-usage/pkg/nanoleaf"
 )
 
@@ -43,6 +44,22 @@ func newLayoutCmd() *cobra.Command {
 			for _, p := range skipped {
 				o.printf("skipped panel %d: id out of protocol range\n", p.ID)
 			}
+
+			// An unnamed shape is the one thing a user cannot work
+			// out on their own, and it is the reason a panel can end
+			// up dark or a blank can end up in the gauge.
+			unknown := map[int]int{}
+			for _, p := range layout.Panels {
+				if !nanoleaf.IsKnownShape(p.ShapeType) {
+					unknown[p.ShapeType]++
+				}
+			}
+			for shape, count := range unknown {
+				o.printf("%s %d panels report shape %d, which this version does not know.\n",
+					ui.Warn.Render("Note:"), count, shape)
+				o.printf("      If they have no LEDs, set %s=%d\n",
+					daemon.EnvSkipShapes, shape)
+			}
 			o.print("\n")
 
 			// The tabwriter buffers, so its Flush has to happen before
@@ -54,7 +71,7 @@ func newLayoutCmd() *cobra.Command {
 			for _, pt := range geo.Points {
 				p := renderedPanel(layout, pt.PanelID)
 				table.printf("%d\t%d\t%d\t%d\t%s\t%.2f\t%.2f\t%.2f\n",
-					p.ID, p.X, p.Y, p.Orientation, shapeName(p.ShapeType),
+					p.ID, p.X, p.Y, p.Orientation, nanoleaf.ShapeName(p.ShapeType),
 					pt.U, pt.V, pt.S)
 			}
 			if err := table.Err(); err != nil {
@@ -86,17 +103,4 @@ func renderedPanel(l nanoleaf.Layout, id int) nanoleaf.Panel {
 		}
 	}
 	return nanoleaf.Panel{ID: id}
-}
-
-func shapeName(t int) string {
-	switch t {
-	case nanoleaf.ShapeTriangle:
-		return "triangle"
-	case nanoleaf.ShapeMiniTriangle:
-		return "mini-triangle"
-	case nanoleaf.ShapeController:
-		return "controller"
-	default:
-		return fmt.Sprintf("type-%d", t)
-	}
 }

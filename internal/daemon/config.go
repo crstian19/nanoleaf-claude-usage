@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/crstian19/nanoleaf-claude-usage/internal/limits"
@@ -25,6 +26,7 @@ const (
 	EnvLimitsEvery   = "NANOCLAUDE_LIMITS_EVERY"
 	EnvLimitsCache   = "NANOCLAUDE_LIMITS_CACHE"
 	EnvIdleExit      = "NANOCLAUDE_IDLE_EXIT"
+	EnvSkipShapes    = "NANOCLAUDE_SKIP_SHAPES"
 	EnvFPS           = "NANOCLAUDE_FPS"
 	EnvRotation      = "NANOCLAUDE_ROTATION"
 )
@@ -140,6 +142,36 @@ var (
 	ErrNoDevice = errors.New("daemon: no Nanoleaf device configured")
 )
 
+// applySkipShapes tells the protocol package which shape identifiers to treat
+// as blanks on this device.
+//
+// It exists because no list of models stays complete. Nanoleaf keeps
+// releasing shapes, and a panel that turns out to have no LEDs leaves a dead
+// spot in every frame until someone can say so. `nanoclaude layout` prints
+// each panel's identifier, so the number to put here is visible rather than
+// guessed.
+func applySkipShapes() error {
+	raw := os.Getenv(EnvSkipShapes)
+	if raw == "" {
+		return nil
+	}
+
+	skip := map[int]bool{}
+	for _, field := range strings.Split(raw, ",") {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		v, err := strconv.Atoi(field)
+		if err != nil || v < 0 {
+			return fmt.Errorf("daemon: %s wants shape numbers separated by commas, got %q", EnvSkipShapes, field)
+		}
+		skip[v] = true
+	}
+	nanoleaf.SkipShapes = skip
+	return nil
+}
+
 // LeafFromEnv builds a Nanoleaf client from the configuration.
 //
 // It loads the configuration file first, exactly as the daemon does. Without
@@ -159,6 +191,9 @@ func LeafFromEnv() (*nanoleaf.Client, error) {
 		return nil, err
 	}
 	if err := LoadConfigFile(path); err != nil {
+		return nil, err
+	}
+	if err := applySkipShapes(); err != nil {
 		return nil, err
 	}
 
@@ -229,6 +264,9 @@ func ConfigFromEnv() (Config, error) {
 		return Config{}, err
 	}
 	if err := LoadConfigFile(path); err != nil {
+		return Config{}, err
+	}
+	if err := applySkipShapes(); err != nil {
 		return Config{}, err
 	}
 	return configFromEnvOnly()

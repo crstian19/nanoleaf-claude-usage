@@ -232,10 +232,11 @@ func offerCalibrate(ctx context.Context, cmd *cobra.Command, host, token string)
 	run := true
 	if err := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().
-			Title("Check which way the shape is mounted?").
-			Description("Lights the bottom of the shape green and the top red for 30 seconds.\n" +
-				"The panels report their positions, but nothing tells them which way\n" +
-				"is up on your wall, so this is the only way to be sure.").
+			Title("Line the shape up with your wall?").
+			Description("Lights the bottom of the shape green and the top red, and lets you\n" +
+				"turn it with the arrow keys until it matches. The panels report\n" +
+				"where they are, but nothing tells them which way is up in your\n" +
+				"room, so this is the only way to be sure.").
 			Value(&run),
 	)).RunWithContext(ctx); err != nil {
 		return err
@@ -244,28 +245,9 @@ func offerCalibrate(ctx context.Context, cmd *cobra.Command, host, token string)
 		return nil
 	}
 
-	o := newOut(cmd.OutOrStdout())
-	o.print(ui.Muted.Render("Look at the wall. Green must be at the bottom.") + "\n")
-	if err := o.Err(); err != nil {
-		return err
-	}
-
-	if err := runCalibration(ctx, host, token, 30*time.Second); err != nil {
-		return err
-	}
-
-	right := true
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().Title("Was green at the bottom?").Value(&right),
-	)).RunWithContext(ctx); err != nil {
-		return err
-	}
-	if !right {
-		o.print("\n" + ui.Warn.Render("Set NANOCLAUDE_ROTATION and run `nanoclaude calibrate` again.") + "\n")
-		o.print(ui.Muted.Render("It is added to the orientation the panels report, in degrees.") + "\n")
-		return o.Err()
-	}
-	return nil
+	// The dial, not a static pattern: nobody can look at a wall and name
+	// an angle, so the shape is turned with the arrow keys instead.
+	return turnShape(cmd, nanoleaf.New(host, token), 0)
 }
 
 // offerHooks installs the hooks, which is what makes the display start on its

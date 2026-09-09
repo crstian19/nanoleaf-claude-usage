@@ -6,10 +6,13 @@ import (
 	"io"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/crstian19/nanoleaf-claude-usage/internal/daemon"
 	"github.com/crstian19/nanoleaf-claude-usage/internal/render"
+	"github.com/crstian19/nanoleaf-claude-usage/internal/ui"
 	"github.com/crstian19/nanoleaf-claude-usage/pkg/nanoleaf"
 )
 
@@ -21,132 +24,131 @@ var (
 	calibrateMiddle = nanoleaf.RGB{R: 0, G: 0, B: 90}
 )
 
+const (
+	// calibrateFrame is how often the pattern is resent. Slow, because the
+	// picture only changes when a key is pressed.
+	calibrateFrame = 200 * time.Millisecond
+
+	// coarseStep and fineStep are how far the arrow keys turn the shape.
+	// Coarse is a sixth of a turn, which is the symmetry of a triangular
+	// or hexagonal tiling, so it lands on the orientations a wall is
+	// likely to use.
+	coarseStep = 15
+	fineStep   = 1
+)
+
 func newCalibrateCmd() *cobra.Command {
 	var (
 		rotation int
 		hold     time.Duration
+		static   bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "calibrate",
-		Short: "Light the panels to confirm which way the shape is mounted",
-		Long: "Paints the bottom of the shape green and the top red, according to the\n" +
-			"orientation the daemon believes the panels are in.\n\n" +
-			"Panel coordinates come from the Nanoleaf app's arrangement, which does\n" +
-			"not know which way is up on the wall; the device's global orientation\n" +
-			"is what reconciles the two, and it is undone rather than applied.\n\n" +
-			"Run this and look at the wall. If green is not at the bottom, the\n" +
-			"device's orientation disagrees with how the panels actually hang: set\n" +
-			"NANOCLAUDE_ROTATION to the difference in degrees.\n\n" +
-			"The panels are restored on exit.",
+		Short: "Turn the shape until it matches your wall",
+		Long: "Lights the bottom of the shape green and the top red, and lets you turn\n" +
+			"it with the arrow keys until it matches the wall. Enter saves the\n" +
+			"rotation to the configuration file.\n\n" +
+			"This exists because nobody can look at a wall and name an angle. The\n" +
+			"panels report where they are, and the device reports how the whole\n" +
+			"arrangement is rotated, but nothing tells it which way is up in your\n" +
+			"room. The earlier advice was to work out the difference in degrees and\n" +
+			"set it by hand, which is not something a person can do.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-
 			client, err := daemon.LeafFromEnv()
 			if err != nil {
 				return err
 			}
-			return calibrate(ctx, cmd.OutOrStdout(), client, rotation, hold)
+			if static || !ui.Interactive(cmd.OutOrStdout()) {
+				return holdPattern(cmd.Context(), cmd.OutOrStdout(), client, rotation, hold)
+			}
+			return turnShape(cmd, client, rotation)
 		},
 	}
 
-	cmd.Flags().IntVar(&rotation, "rotation", 0,
-		"extra rotation in degrees, added to the layout's global orientation")
-	cmd.Flags().DurationVar(&hold, "hold", 30*time.Second, "how long to hold the pattern")
+	cmd.Flags().IntVar(&rotation, "rotation", 0, "rotation to start from, in degrees")
+	cmd.Flags().DurationVar(&hold, "hold", 30*time.Second, "how long to hold the pattern in static mode")
+	cmd.Flags().BoolVar(&static, "static", false, "just hold the pattern, without the arrow keys")
 	return cmd
 }
 
-// runCalibration paints the pattern for a client built from an address and a
-// token, for callers that do not have the environment set up yet.
-func runCalibration(ctx context.Context, host, token string, hold time.Duration) error {
-	return calibrate(ctx, io.Discard, nanoleaf.New(host, token), 0, hold)
+// pattern is the calibration picture for a geometry: green at the bottom, red
+// at the top, and a dim blue between them.
+func pattern(geo render.Geometry) nanoleaf.Frame {
+	frame := make(nanoleaf.Frame, len(geo.Points))
+	for _, p := range geo.Points {
+		switch {
+		case p.V < 0.34:
+			frame[p.PanelID] = calibrateBottom
+		case p.V > 0.66:
+			frame[p.PanelID] = calibrateTop
+		default:
+			frame[p.PanelID] = calibrateMiddle
+		}
+	}
+	return frame
 }
 
-// calibrate paints the orientation pattern and holds it.
-func calibrate(ctx context.Context, w io.Writer, client *nanoleaf.Client, rotation int, hold time.Duration) error {
-	{
-		layout, err := client.Layout(ctx)
-		if err != nil {
+// holdPattern paints the pattern once and leaves it up, for a pipe or a
+// script.
+func holdPattern(ctx context.Context, w io.Writer, client *nanoleaf.Client, rotation int, hold time.Duration) error {
+	layout, err := client.Layout(ctx)
+	if err != nil {
+		return err
+	}
+	geo, _ := render.FromLayout(layout, rotation)
+	if len(geo.Points) == 0 {
+		return fmt.Errorf("calibrate: no renderable panels")
+	}
+
+	saved, err := client.State(ctx)
+	if err != nil {
+		return err
+	}
+	// Streaming to powered-off panels shows nothing, so the pattern would
+	// be invisible and look like a fault.
+	if !saved.On {
+		if err := client.SetOn(ctx, true); err != nil {
 			return err
 		}
-		geo, _ := render.FromLayout(layout, rotation)
-		if len(geo.Points) == 0 {
-			return fmt.Errorf("calibrate: no renderable panels")
-		}
+	}
 
-		// Saved before the stream is opened, so the panels can be
-		// put back the way they were found.
-		saved, err := client.State(ctx)
-		if err != nil {
+	stream, err := client.OpenStream(ctx, calibrateFrame)
+	if err != nil {
+		return err
+	}
+	defer restore(client, stream, saved)
+
+	o := newOut(w)
+	o.printf("global orientation %d deg + extra rotation %d deg\n", layout.GlobalOrientation, rotation)
+	o.printf("holding for %s -- look at the wall, green must be at the bottom\n", hold)
+	if err := o.Err(); err != nil {
+		return err
+	}
+
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	deadline := time.After(hold)
+
+	frame := pattern(geo)
+	for {
+		if err := stream.Send(frame); err != nil {
 			return err
 		}
-
-		frame := make(nanoleaf.Frame, len(geo.Points))
-		var bottom, middle, top int
-		for _, p := range geo.Points {
-			switch {
-			case p.V < 0.34:
-				frame[p.PanelID] = calibrateBottom
-				bottom++
-			case p.V > 0.66:
-				frame[p.PanelID] = calibrateTop
-				top++
-			default:
-				frame[p.PanelID] = calibrateMiddle
-				middle++
-			}
-		}
-
-		o := newOut(w)
-		o.printf("global orientation %d deg + extra rotation %d deg\n",
-			layout.GlobalOrientation, rotation)
-		o.printf("painting %d panels GREEN (bottom), %d BLUE (middle), %d RED (top)\n",
-			bottom, middle, top)
-		o.printf("holding for %s -- look at the wall\n", hold)
-		if err := o.Err(); err != nil {
-			return err
-		}
-
-		// Streaming to powered-off panels shows nothing, so the
-		// pattern would be invisible and look like a bug. restore
-		// puts the power back as it was.
-		if !saved.On {
-			if err := client.SetOn(ctx, true); err != nil {
-				return err
-			}
-		}
-
-		stream, err := client.OpenStream(ctx, 200*time.Millisecond)
-		if err != nil {
-			return err
-		}
-		defer restore(client, stream, saved)
-
-		// Resent periodically: a single frame is enough for the
-		// panels, but repeating keeps the picture up if a packet
-		// is lost, and lets the hold be interrupted promptly.
-		tick := time.NewTicker(time.Second)
-		defer tick.Stop()
-
-		deadline := time.After(hold)
-		for {
-			if err := stream.Send(frame); err != nil {
-				return err
-			}
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-deadline:
-				return nil
-			case <-tick.C:
-			}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-deadline:
+			return nil
+		case <-tick.C:
 		}
 	}
 }
 
 // restore hands the panels back, on a context of its own because the
-// command's may already be cancelled by the interrupt that ended the hold.
+// command's may already be cancelled by the key that ended the session.
 func restore(client *nanoleaf.Client, stream *nanoleaf.Streamer, saved nanoleaf.State) {
 	_ = stream.Close()
 
@@ -160,4 +162,151 @@ func restore(client *nanoleaf.Client, stream *nanoleaf.Streamer, saved nanoleaf.
 		}
 	}
 	_ = client.SetOn(ctx, false)
+}
+
+func (m *turnModel) Init() tea.Cmd { return m.send() }
+
+// turnShape runs the interactive dial.
+func turnShape(cmd *cobra.Command, client *nanoleaf.Client, rotation int) error {
+	ctx := cmd.Context()
+
+	layout, err := client.Layout(ctx)
+	if err != nil {
+		return err
+	}
+	if geo, _ := render.FromLayout(layout, rotation); len(geo.Points) == 0 {
+		return fmt.Errorf("calibrate: no renderable panels")
+	}
+
+	saved, err := client.State(ctx)
+	if err != nil {
+		return err
+	}
+	if !saved.On {
+		if err := client.SetOn(ctx, true); err != nil {
+			return err
+		}
+	}
+
+	stream, err := client.OpenStream(ctx, calibrateFrame)
+	if err != nil {
+		return err
+	}
+	defer restore(client, stream, saved)
+
+	m := &turnModel{
+		layout:   layout,
+		stream:   stream,
+		rotation: rotation,
+	}
+	final, err := tea.NewProgram(m, tea.WithContext(ctx), tea.WithOutput(cmd.OutOrStdout())).Run()
+	if err != nil {
+		return err
+	}
+
+	done, ok := final.(*turnModel)
+	if !ok || !done.accepted {
+		o := newOut(cmd.OutOrStdout())
+		o.print(ui.Muted.Render("Cancelled. Nothing was saved.") + "\n")
+		return o.Err()
+	}
+	return saveRotation(cmd, done.rotation)
+}
+
+// saveRotation writes the accepted value to the configuration file.
+func saveRotation(cmd *cobra.Command, rotation int) error {
+	path, err := daemon.ConfigFilePath()
+	if err != nil {
+		return err
+	}
+	if err := daemon.SetConfigValue(path, daemon.EnvRotation, fmt.Sprint(rotation)); err != nil {
+		return err
+	}
+
+	o := newOut(cmd.OutOrStdout())
+	o.printf("%s %s=%s\n", ui.Good.Render("Saved"),
+		daemon.EnvRotation, ui.Value.Render(fmt.Sprint(rotation)))
+	o.printf("  %s\n", ui.Muted.Render(path))
+	o.print("\n" + ui.Muted.Render("Restart the display to pick it up: nanoclaude down && nanoclaude up") + "\n")
+	return o.Err()
+}
+
+// turnModel is the dial.
+type turnModel struct {
+	layout   nanoleaf.Layout
+	stream   *nanoleaf.Streamer
+	rotation int
+
+	accepted bool
+	err      error
+}
+
+type turnTick struct{}
+
+func (m *turnModel) send() tea.Cmd {
+	return func() tea.Msg {
+		geo, _ := render.FromLayout(m.layout, m.rotation)
+		if err := m.stream.Send(pattern(geo)); err != nil {
+			return err
+		}
+		time.Sleep(calibrateFrame)
+		return turnTick{}
+	}
+}
+
+func (m *turnModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case turnTick:
+		return m, m.send()
+
+	case error:
+		m.err = msg
+		return m, tea.Quit
+
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "left":
+			m.rotation = wrap(m.rotation - coarseStep)
+		case "right":
+			m.rotation = wrap(m.rotation + coarseStep)
+		case "shift+left", ",":
+			m.rotation = wrap(m.rotation - fineStep)
+		case "shift+right", ".":
+			m.rotation = wrap(m.rotation + fineStep)
+		case "enter":
+			m.accepted = true
+			return m, tea.Quit
+		case "esc", "q", "ctrl+c":
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+// wrap keeps the rotation in [0, 360).
+func wrap(deg int) int {
+	deg %= 360
+	if deg < 0 {
+		deg += 360
+	}
+	return deg
+}
+
+func (m *turnModel) View() tea.View {
+	geo, _ := render.FromLayout(m.layout, m.rotation)
+
+	help := ui.Muted.Render(
+		"←/→ turn 15°   ,/. turn 1°   enter save   esc cancel")
+	status := fmt.Sprintf("rotation %s   %s",
+		ui.Value.Render(fmt.Sprintf("%3d°", m.rotation)),
+		ui.Muted.Render(fmt.Sprintf("(device reports %d°)", m.layout.GlobalOrientation)))
+
+	return tea.NewView(lipgloss.JoinVertical(lipgloss.Left,
+		ui.Title.Render("Turn the shape until green is at the bottom of your wall"),
+		"",
+		status,
+		"",
+		drawShape(geo, pattern(geo)),
+		help,
+	))
 }

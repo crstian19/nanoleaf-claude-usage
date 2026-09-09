@@ -48,10 +48,15 @@ To pair, hold the power button on the controller for 5 to 7 seconds, until the
 LEDs flash. The panels hold several tokens at once, so this does not revoke
 access for Home Assistant or for the Nanoleaf app.
 
-`calibrate` lights the bottom of the shape green and the top red. The panels
-report where they are, but nothing tells them which way is up on your wall, so
-look at the wall. If green is not at the bottom, set `NANOCLAUDE_ROTATION` to
-the difference in degrees.
+`calibrate` lights the bottom of the shape green and the top red, and lets you
+turn it with the arrow keys until it matches your wall. Press enter and it
+saves the rotation. The panels report where they are, and the device reports
+how the arrangement is rotated, but nothing tells it which way is up in your
+room.
+
+You never have to name an angle. That was the earlier advice and it was not
+something a person can do: working out the difference took a photograph and a
+statistical fit of the panel positions.
 
 `hooks install` writes to `~/.claude/settings.json`. It keeps every hook that
 is already there and it writes a backup first. It also edits the file in
@@ -76,7 +81,7 @@ You can also control it by hand:
 | `nanoclaude run` | Run it in the foreground |
 | `nanoclaude discover` | Find Nanoleaf controllers on this network |
 | `nanoclaude pair` | Get an API token from panels in pairing mode |
-| `nanoclaude calibrate` | Light the panels to check the mounted shape |
+| `nanoclaude calibrate` | Turn the shape until it matches your wall |
 | `nanoclaude layout` | Print the panel positions and the scene coordinates |
 | `nanoclaude preview` | Draw a scene in the terminal, without touching the panels |
 | `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |
@@ -119,7 +124,8 @@ below are all it understands.
 | `NANOCLAUDE_LIMITS` | Source of the usage figure: `cache`, `api`, or `off`. |
 | `NANOCLAUDE_LIMITS_CACHE` | Path of the status line cache, for `cache` mode. |
 | `NANOCLAUDE_CEILING_COST` | Cost of a full session, in dollars. |
-| `NANOCLAUDE_ROTATION` | Extra rotation in degrees. See `nanoclaude calibrate`. |
+| `NANOCLAUDE_ROTATION` | Extra rotation in degrees. `nanoclaude calibrate` writes it. |
+| `NANOCLAUDE_SKIP_SHAPES` | Shape numbers to treat as blanks, separated by commas. |
 | `NANOCLAUDE_IDLE_EXIT` | Time with no session before it shuts down. `0` never. |
 | `NANOCLAUDE_FPS` | Frame rate, from 1 to 60. |
 
@@ -178,6 +184,20 @@ from the arrangement you built in the Nanoleaf app. That app does not know
 which way is up on your wall. The program undoes that orientation. It does not
 apply it again. On a real device at 302 degrees, the wrong sign put the
 vertical axis 116 degrees out, and the gauge climbed diagonally.
+
+### Panel models
+
+The device reports a shape number for every panel, and some shapes have no
+LEDs: the Shapes controller brick and the Rhythm module both appear in a
+layout like any other panel. Lighting one puts a dead spot in the middle of
+every frame, so they are left out.
+
+Only the shapes this version is sure about are named. Nanoleaf keeps
+releasing models, and an exhaustive list would be wrong within a year in the
+worst way: a real panel treated as a blank goes dark, and a blank treated as
+a panel does the same. So an unnamed shape is still rendered, and
+`nanoclaude layout` prints its number with a note. If it turns out to have no
+LEDs, put that number in `NANOCLAUDE_SKIP_SHAPES`.
 
 ### Colors
 
