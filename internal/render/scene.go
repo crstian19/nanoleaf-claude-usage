@@ -88,6 +88,30 @@ const (
 	// their exact colour and only touches two or three at a time.
 	waveSigma = 0.15
 
+	// waveGlow is the absolute amount of light the highlight adds, on the
+	// same scale as the gauge's own brightness.
+	//
+	// Absolute, not proportional, and that is the whole point. Scaling the
+	// highlight by the band's fill meant it vanished exactly when the
+	// gauge was empty: at 1% spent, eight of nine bands sit at the dim
+	// floor, so a proportional highlight was multiplied by 0.055 and the
+	// wall showed a flat dim mush with nothing travelling across it.
+	//
+	// The size is set by the one constraint that matters: an unspent band
+	// with the highlight on it must stay clearly darker than a spent band
+	// without it, since both are on the wall at once. Measured in the
+	// bytes that actually reach the panels, this leaves the dimmest spent
+	// band 1.85x the brightest unspent one while still moving an unspent
+	// band by 1.6x -- enough to see it travel.
+	//
+	// The comparison has to be made across bands and in bytes, not within
+	// one band in linear light. The ramp's bands do not all emit the same
+	// amount (341 to 456 in byte terms), and gamma makes the linear
+	// numbers these constants are written in badly misleading: 0.12 looked
+	// safe linearly and brought a highlighted empty band within 2% of a
+	// spent one on the wall.
+	waveGlow = 0.04
+
 	// waveLift is how much brighter the highlight makes a band, and
 	// waveSaturate how far it pushes the band's chroma towards the most
 	// the gamut allows at that brightness. See Color.Highlight.
@@ -233,9 +257,15 @@ func (s *Scene) Frame(in Input, t time.Duration) nanoleaf.Frame {
 		// after it, so a spent band and an unspent one under the same
 		// part of the highlight keep their ratio exactly.
 		if rainbow == 0 {
-			col = col.Highlight(waveAt(p.S, secs))
+			// The gauge first, then the highlight added on top of
+			// it. Applying the highlight to the colour and scaling
+			// afterwards is what made it disappear on an empty
+			// gauge -- see waveGlow.
+			g := waveAt(p.S, secs)
+			col = col.Highlight(g).Scale(brightness + waveGlow*g)
+		} else {
+			col = col.Scale(brightness)
 		}
-		col = col.Scale(brightness)
 
 		if in.Phase == PhaseError {
 			flash := 0.5 + 0.5*math.Sin(2*math.Pi*2*secs)
