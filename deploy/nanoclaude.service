@@ -1,0 +1,38 @@
+[Unit]
+Description=Claude Code usage on Nanoleaf panels
+Documentation=https://github.com/crstian19/nanoclaude
+# Both the panels and Home Assistant live on the LAN, so starting before the
+# network is up just means a failed first attempt and a restart.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Secrets live in a 0600 file rather than in the unit, so they stay out of
+# `systemctl cat` and out of the process arguments visible in ps.
+EnvironmentFile=%h/.config/nanoclaude/env
+ExecStart=%h/.local/bin/nanoclaude run
+
+# The daemon hands the panels back on SIGTERM (restoring the previous effect),
+# so give it room to finish that before being killed.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+Restart=on-failure
+RestartSec=10s
+
+# A backstop, not a budget: ccusage is a Node process parsing tens of
+# megabytes of transcripts and legitimately peaks around 200M, so this is set
+# well clear of that and exists only to catch a runaway.
+MemoryMax=512M
+
+# It only needs to read ~/.claude and ~/.local/state and talk to the LAN.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# ...except its own state directory, where hook events are recorded.
+ReadWritePaths=%h/.local/state/nanoclaude
+
+[Install]
+WantedBy=default.target
