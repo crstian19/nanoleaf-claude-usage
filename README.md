@@ -82,21 +82,30 @@ nanoclaude preview --web                        # all of them, pick from the pag
 nanoclaude preview --shape hexagons-honeycomb   # one of them, in the terminal
 ```
 
-There are nine samples:
+There are ten samples:
 
-- Hexagons in a honeycomb, and hexagons in a column.
+- Hexagons in a honeycomb, and hexagons in a zigzagging column.
+- A hexagon with hexagons and triangles around it, which Nanoleaf sells to be
+  mixed.
 - Canvas squares in a grid.
 - Triangles in a row, in a block, and in the zigzag this was written on.
-- Mini triangles, and a mixed set of both sizes.
+- Mini triangles, and a set with both sizes of triangle.
 - The original Light Panels, the triangles from the Aurora.
 
 Nothing is sent to a device in this mode, and nothing can be saved. It is
 safe to run while the display works.
 
-Each sample is built from the tiling the real panels click together in. A test
-then holds every one of them to the rule a wall follows: panels that touch
-share a whole edge. That is how a wrong corner angle is caught, because on
-screen it draws a heap of overlapping shapes instead of a wall.
+Each sample is built the way a wall is built: a panel is stuck to an edge of
+one already placed. Panels can go on in any order and the wall comes out the
+same, because every position comes from the edge it was attached to. An edge
+that already has a panel on it is refused.
+
+A test then holds every sample to the rule a wall follows: panels as close as
+neighbours get share a whole edge. That is how a wrong corner angle is caught,
+because on screen it draws a heap of overlapping shapes instead of a wall.
+
+If you want a sample of your own wall, or of the wall you are thinking of
+buying, ask. It is a few lines.
 
 `hooks install` writes to `~/.claude/settings.json`. It keeps every hook that
 is already there and it writes a backup first. It also edits the file in

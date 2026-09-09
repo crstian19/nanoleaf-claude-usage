@@ -14,8 +14,6 @@ package shapes
 
 import (
 	"fmt"
-	"math"
-	"sort"
 	"strings"
 
 	"github.com/crstian19/nanoleaf-claude-usage/pkg/nanoleaf"
@@ -46,6 +44,15 @@ const (
 	auroraSide = 150
 )
 
+// Directions used to describe the walls below, in degrees counter-clockwise
+// from the right. Named because "AttachToward(last, right, ...)" says what a
+// person building a wall would say, and 0 does not.
+const (
+	right = 0.0
+	up    = 90.0
+	left  = 180.0
+)
+
 // All returns every sample, in the order they are offered.
 //
 // The first is the arrangement this program was written against, so it is
@@ -60,12 +67,12 @@ func All() []Sample {
 		{
 			Name:   "triangles-row",
 			Label:  "7 triangles in a straight row",
-			Layout: triangleRow(),
+			Layout: row(shapesSide, nanoleaf.ShapeTriangle, 7),
 		},
 		{
 			Name:   "triangles-wall",
 			Label:  "16 triangles in a block, four rows deep",
-			Layout: triangleWall(),
+			Layout: block(shapesSide, nanoleaf.ShapeTriangle, 4, 4),
 		},
 		{
 			Name:   "hexagons-honeycomb",
@@ -74,18 +81,23 @@ func All() []Sample {
 		},
 		{
 			Name:   "hexagons-column",
-			Label:  "5 hexagons in a vertical column",
+			Label:  "5 hexagons in a zigzagging column",
 			Layout: hexColumn(),
+		},
+		{
+			Name:   "hexagons-and-triangles",
+			Label:  "a hexagon with hexagons and triangles around it",
+			Layout: hexFlower(),
 		},
 		{
 			Name:   "squares-grid",
 			Label:  "9 Canvas squares in a 3 by 3 grid",
-			Layout: squareGrid(3, 3),
+			Layout: block(canvasSide, nanoleaf.ShapeSquare, 3, 3),
 		},
 		{
 			Name:   "mini-triangles",
 			Label:  "12 mini triangles in two rows",
-			Layout: miniRows(),
+			Layout: block(miniSide, nanoleaf.ShapeMiniTriangle, 6, 2),
 		},
 		{
 			Name:   "mixed-triangles",
@@ -122,72 +134,17 @@ func Names() []string {
 // Default is the sample a page or a preview opens on.
 func Default() Sample { return All()[0] }
 
-// -- the tilings -------------------------------------------------------------
+// -- the walls ---------------------------------------------------------------
 
-// triangleCell is a cell of a triangular tiling: a column, a row, and which
-// way the triangle points.
+// zigzag is the arrangement this program was written against, reported the
+// way its own device reports it: mounted at a global orientation of 302, with
+// the controller brick as a tenth panel that has no LEDs.
 //
-// Columns are half a side apart, because that is how a triangular row works:
-// an upward triangle and the inverted one beside it share an edge, and their
-// centroids differ by half a side across and a third of the height up.
-type triangleCell struct {
-	col, row int
-	up       bool
-}
-
-// triangles lays cells out on a triangular tiling of the given side length.
-func triangles(side int, shape int, cells []triangleCell) []nanoleaf.Panel {
-	height := float64(side) * math.Sqrt(3) / 2
-	panels := make([]nanoleaf.Panel, 0, len(cells))
-	for i, c := range cells {
-		// A third of the way up for an upward triangle, two thirds for
-		// an inverted one.
-		frac := 1.0 / 3
-		orientation := 0
-		if !c.up {
-			frac = 2.0 / 3
-			orientation = 180
-		}
-		panels = append(panels, nanoleaf.Panel{
-			ID:          firstID + i,
-			X:           int(math.Round(float64(c.col+1) * float64(side) / 2)),
-			Y:           int(math.Round(float64(c.row)*height + frac*height)),
-			Orientation: orientation,
-			ShapeType:   shape,
-		})
-	}
-	return panels
-}
-
-// firstID is where sample panel IDs start. Nothing depends on the value; it
-// only has to look like the device's own five-digit IDs rather than like an
-// index, so nobody reads a sample as a list of cells.
-const firstID = 10100
-
-// hexes lays cells out on a hexagonal tiling, in axial coordinates.
-//
-// The hexagons are pointy-topped, which is how the Shapes hexagons come apart
-// and back together: neighbours sit beside each other in a row, and the next
-// row is offset by half a step.
-func hexes(side int, cells [][2]int) []nanoleaf.Panel {
-	width := float64(side) * math.Sqrt(3)
-	panels := make([]nanoleaf.Panel, 0, len(cells))
-	for i, c := range cells {
-		q, r := float64(c[0]), float64(c[1])
-		panels = append(panels, nanoleaf.Panel{
-			ID:        firstID + i,
-			X:         int(math.Round(width * (q + r/2))),
-			Y:         int(math.Round(1.5 * float64(side) * r)),
-			ShapeType: nanoleaf.ShapeHexagon,
-		})
-	}
-	return panels
-}
-
+// Written out rather than built, because it is a measurement. It is the
+// fixture the sign of the global orientation and the triangle corner angles
+// were both settled against, and a version of it that came out of the builder
+// would only agree with the builder.
 func zigzag() nanoleaf.Layout {
-	// The arrangement this program was written against, reported the way
-	// its device reports it: mounted at a global orientation of 302, with
-	// the controller brick as a tenth panel that has no LEDs.
 	layout := nanoleaf.Layout{
 		SideLength:        shapesSide,
 		GlobalOrientation: 302,
@@ -201,6 +158,7 @@ func zigzag() nanoleaf.Layout {
 			{ID: 51695, X: 167, Y: 89, Orientation: 120, ShapeType: nanoleaf.ShapeTriangle},
 			{ID: 58908, X: 234, Y: 127, Orientation: 180, ShapeType: nanoleaf.ShapeTriangle},
 			{ID: 17522, X: 301, Y: 89, Orientation: 240, ShapeType: nanoleaf.ShapeTriangle},
+			// The controller reports itself as a panel and has no LEDs.
 			{ID: 0, X: 0, Y: 40, Orientation: 180, ShapeType: nanoleaf.ShapeController},
 		},
 	}
@@ -208,118 +166,129 @@ func zigzag() nanoleaf.Layout {
 	return layout
 }
 
-func triangleRow() nanoleaf.Layout {
-	cells := make([]triangleCell, 0, 7)
-	for col := range 7 {
-		cells = append(cells, triangleCell{col: col, up: col%2 == 0})
+// row sticks panels side by side, going right.
+func row(side, shapeType, count int) nanoleaf.Layout {
+	b := Start(side, shapeType)
+	last := 0
+	for range count - 1 {
+		last = b.AttachToward(last, right, shapeType)
 	}
-	return sized(shapesSide, triangles(shapesSide, nanoleaf.ShapeTriangle, cells))
+	return mustLayout(b)
 }
 
-func triangleWall() nanoleaf.Layout {
-	cells := make([]triangleCell, 0, 16)
-	for row := range 4 {
-		for col := range 4 {
-			cells = append(cells, triangleCell{col: col, row: row, up: col%2 == 0})
+// block fills a wall row by row, each row running back the way the last one
+// came.
+//
+// Alternating the direction is not decoration: a row of triangles ends on an
+// inverted one, and an inverted triangle is the only one with an edge facing
+// up, so the row above starts from there.
+func block(side, shapeType, across, rows int) nanoleaf.Layout {
+	b := Start(side, shapeType)
+
+	last := 0
+	toward := right
+	for r := range rows {
+		if r > 0 {
+			last = b.AttachToward(last, up, shapeType)
+			toward = left + (right - toward)
+		}
+		for range across - 1 {
+			last = b.AttachToward(last, toward, shapeType)
 		}
 	}
-	return sized(shapesSide, triangles(shapesSide, nanoleaf.ShapeTriangle, cells))
+	return mustLayout(b)
 }
 
+// honeycomb is a hexagon with the six that fit around it, which is how the
+// starter kit is usually mounted.
 func honeycomb() nanoleaf.Layout {
-	// A centre hexagon and the six around it, which is how the starter kit
-	// is usually mounted.
-	return sized(shapesSide, hexes(shapesSide, [][2]int{
-		{0, 0}, {1, 0}, {-1, 0}, {0, 1}, {-1, 1}, {0, -1}, {1, -1},
-	}))
+	b := Start(shapesSide, nanoleaf.ShapeHexagon)
+	for edge := range 6 {
+		b.Attach(0, edge, nanoleaf.ShapeHexagon)
+	}
+	return mustLayout(b)
 }
 
+// hexColumn climbs a wall in hexagons. Pointy-topped hexagons have no upward
+// edge, so a column of them zigzags: that is what the tiling allows, and
+// pretending otherwise would draw a stack that does not touch.
 func hexColumn() nanoleaf.Layout {
-	cells := make([][2]int, 0, 5)
-	for r := range 5 {
-		// Each row of a pointy-topped tiling is offset half a step, so a
-		// column that looks straight steps back one every two rows.
-		cells = append(cells, [2]int{-r / 2, r})
-	}
-	return sized(shapesSide, hexes(shapesSide, cells))
-}
-
-func squareGrid(cols, rows int) nanoleaf.Layout {
-	panels := make([]nanoleaf.Panel, 0, cols*rows)
-	for row := range rows {
-		for col := range cols {
-			shape := nanoleaf.ShapeSquare
-			// One square in a Canvas holds the controller.
-			if row == 0 && col == 0 {
-				shape = nanoleaf.ShapeSquareMaster
-			}
-			panels = append(panels, nanoleaf.Panel{
-				ID:        firstID + len(panels),
-				X:         col * canvasSide,
-				Y:         row * canvasSide,
-				ShapeType: shape,
-			})
+	b := Start(shapesSide, nanoleaf.ShapeHexagon)
+	last := 0
+	for i := range 4 {
+		toward := 60.0
+		if i%2 == 1 {
+			toward = 120
 		}
+		last = b.AttachToward(last, toward, nanoleaf.ShapeHexagon)
 	}
-	return sized(canvasSide, panels)
+	return mustLayout(b)
 }
 
-func miniRows() nanoleaf.Layout {
-	cells := make([]triangleCell, 0, 12)
-	for row := range 2 {
-		for col := range 6 {
-			cells = append(cells, triangleCell{col: col, row: row, up: col%2 == 0})
+// hexFlower mixes the two Shapes that share an edge length. Nanoleaf sells
+// them to be combined, and a wall that mixes them is the case where a panel
+// meets a neighbour of a different kind.
+func hexFlower() nanoleaf.Layout {
+	b := Start(shapesSide, nanoleaf.ShapeHexagon)
+	for edge := range 6 {
+		shapeType := nanoleaf.ShapeTriangle
+		if edge%2 == 0 {
+			shapeType = nanoleaf.ShapeHexagon
 		}
+		b.Attach(0, edge, shapeType)
 	}
-	return sized(miniSide, triangles(miniSide, nanoleaf.ShapeMiniTriangle, cells))
+	return mustLayout(b)
 }
 
+// mixed puts mini triangles under a row of full ones. Two minis fit along one
+// full edge, which is how the two sizes are sold to be combined.
 func mixed() nanoleaf.Layout {
-	full := triangles(shapesSide, nanoleaf.ShapeTriangle, []triangleCell{
-		{col: 0, row: 1, up: true},
-		{col: 1, row: 1, up: false},
-		{col: 2, row: 1, up: true},
-		{col: 3, row: 1, up: false},
-	})
+	b := Start(shapesSide, nanoleaf.ShapeTriangle)
 
-	// The minis sit on their own tiling, half the size, in the row below.
-	// Four of them fill the footprint of one full triangle, which is how
-	// the two sizes are sold to be combined, so eight of them run the
-	// width of the four above.
-	miniCells := make([]triangleCell, 0, 8)
-	for col := range 8 {
-		miniCells = append(miniCells, triangleCell{col: col, row: 1, up: col%2 == 0})
-	}
-	mini := triangles(miniSide, nanoleaf.ShapeMiniTriangle, miniCells)
-	for i := range mini {
-		mini[i].ID = firstID + 100 + i
+	full := make([]int, 1, 4)
+	for range 3 {
+		full = append(full, b.AttachToward(full[len(full)-1], right, nanoleaf.ShapeTriangle))
 	}
 
-	// The reported side length is the full triangle's, as a real device
-	// with both sizes reports it.
-	return sized(shapesSide, append(full, mini...))
+	// The upward triangles are the ones with a downward edge, and they are
+	// every other panel in a row.
+	const down = 270.0
+	for i := 0; i < len(full); i += 2 {
+		first := b.AttachHalfToward(full[i], down, nanoleaf.ShapeMiniTriangle, 0)
+		b.AttachHalfToward(full[i], down, nanoleaf.ShapeMiniTriangle, 1)
+
+		// Two minis on the halves of an edge leave an inverted mini's
+		// worth of gap between them, and a third fills it. Without it
+		// the two would meet at a corner and nowhere else, which is a
+		// legal wall but a strange one to hold up as an example.
+		//
+		// It hangs off the first mini's free edge, a sixth of a turn
+		// round from the edge they share.
+		const roundFromShared = 330.0
+		b.AttachToward(first, roundFromShared, nanoleaf.ShapeMiniTriangle)
+	}
+	return mustLayout(b)
 }
 
+// aurora is the original Light Panels, whose triangles are larger than the
+// Shapes ones. Included because they are the model this package cannot drive
+// -- they speak an older streaming protocol -- and the shape still has to be
+// drawn for anyone who has them.
 func aurora() nanoleaf.Layout {
-	cells := make([]triangleCell, 0, 9)
-	for row := range 2 {
-		for col := range 5 {
-			if row == 1 && col == 4 {
-				continue
-			}
-			cells = append(cells, triangleCell{col: col, row: row, up: col%2 == 0})
-		}
-	}
-	return sized(auroraSide, triangles(auroraSide, nanoleaf.ShapeLightPanel, cells))
-}
+	b := Start(auroraSide, nanoleaf.ShapeLightPanel)
 
-// sized finishes a layout: the panel count the device would report, and the
-// panels sorted by ID so a sample is stable to read.
-func sized(side int, panels []nanoleaf.Panel) nanoleaf.Layout {
-	sort.Slice(panels, func(i, j int) bool { return panels[i].ID < panels[j].ID })
-	return nanoleaf.Layout{
-		NumPanels:  len(panels),
-		SideLength: side,
-		Panels:     panels,
+	// Five along the bottom, then back along the top. The second row
+	// hangs off the fourth panel rather than the fifth, because only an
+	// inverted triangle has an edge facing up, and they are every other
+	// one.
+	bottom := make([]int, 1, 5)
+	for range 4 {
+		bottom = append(bottom, b.AttachToward(bottom[len(bottom)-1], right, nanoleaf.ShapeLightPanel))
 	}
+
+	last := b.AttachToward(bottom[3], up, nanoleaf.ShapeLightPanel)
+	for range 3 {
+		last = b.AttachToward(last, left, nanoleaf.ShapeLightPanel)
+	}
+	return mustLayout(b)
 }

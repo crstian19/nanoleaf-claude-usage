@@ -103,7 +103,7 @@ func newTestServer(t *testing.T) (*Server, *panels) {
 	t.Helper()
 	rec := &panels{}
 	s, err := New(t.Context(), Options{
-		Shapes:     []Shape{{Layout: realLayout()}},
+		Shapes:     []Shape{{Layout: realLayout(t)}},
 		Rotation:   0,
 		Open:       rec.open,
 		Save:       rec.save,
@@ -451,7 +451,7 @@ func TestASessionWithNoDeviceDrawsAnyway(t *testing.T) {
 	rec := &panels{}
 	s, err := New(t.Context(), Options{
 		Shapes: []Shape{
-			{Name: "one", Label: "the wall this was written on", Layout: realLayout()},
+			{Name: "one", Label: "the wall this was written on", Layout: realLayout(t)},
 			{Name: "two", Label: "a square", Layout: squareLayout()},
 		},
 	})

@@ -502,11 +502,41 @@ thing for the same reason.
 The arrangement this was written against is nine triangles in a diagonal
 zigzag. Nothing about the drawing, the bands or the long axis is allowed to
 depend on that, and the only way to know is to look at other walls.
-`internal/shapes` holds nine of them, built from the tilings the real products
-click together in: honeycombs, grids, rows, blocks, two sizes of triangle
-mixed, and the original Light Panels. `nanoclaude preview --web` serves the
-same page over them with no device attached, so there is nothing to paint and
-no angle worth saving — the page hides its Save button and says so.
+`internal/shapes` holds ten of them: honeycombs, a mixed hexagon-and-triangle
+flower, grids, rows, blocks, both sizes of triangle together, and the original
+Light Panels. `nanoclaude preview --web` serves the same page over them with
+no device attached, so there is nothing to paint and no angle worth saving —
+the page hides its Save button and says so.
+
+They are **built rather than written down**. `shapes.Builder` sticks a panel
+onto an edge of one already placed:
+
+```go
+b := shapes.Start(134, nanoleaf.ShapeHexagon)
+for edge := range 6 {
+        b.Attach(0, edge, nanoleaf.ShapeHexagon)
+}
+```
+
+Three properties come out of that, and all three are the reason it exists
+rather than a lattice per shape family:
+
+- **Order does not matter.** Every position is derived from the edge it was
+  attached to, so the same wall described in any order is the same wall. A
+  test builds a honeycomb clockwise and then inside out and compares.
+- **An occupied edge is refused.** Two panels cannot end up in one place,
+  which is what makes any order safe.
+- **A direction no edge faces is refused.** An upward triangle has no upward
+  edge, and picking the nearest of the two beside it would put the panel 60°
+  from where it was asked for. `AttachToward(panel, up, …)` fails instead, and
+  the row above a row of triangles hangs off an inverted one.
+
+The positions are held exactly and rounded once, when the layout is reported.
+Rounding each step to the whole units a device reports compounded: twelve
+panels along a wall of mini triangles the tiling was four units out, which is
+past the tolerance two panels have to meet within. That bug was not visible
+in any number — it was visible as a row of triangles that stopped touching at
+the far end, in the browser.
 
 The samples are also what the outlines are measured against.
 `TestEverySampleShapeTiles` holds every one of them to the property a real
@@ -572,6 +602,6 @@ sandbox. Set `NANOCLAUDE_IDLE_EXIT=0` there.
 | `internal/daemon` | Wiring and the loop. |
 | `internal/discover` | Sweeps the local networks for controllers. Scans rather than using mDNS, because reaching an mDNS advert needs a resolver running locally and that is not a safe assumption: on the machine this was written on, avahi-daemon was stopped while the panels answered fine. A /24 takes under a second. |
 | `internal/hooks` | Registers the Claude Code hooks. Edits `settings.json` in place with a JSON path library rather than decoding and re-encoding it, because Go marshals a map with its keys sorted and the file is hand-maintained: a re-encode would reshuffle 26 KB of configuration to add nine entries. |
-| `internal/shapes` | Sample arrangements, built from the tilings the real panels click together in. They exist because a display that only reads well on one wall is not finished, and because the outlines have to be measured against something other than the author's own wall. |
+| `internal/shapes` | Sample arrangements and the builder that composes them, by sticking panels onto each other's edges in any order. They exist because a display that only reads well on one wall is not finished, and because the outlines have to be measured against something other than the author's own wall. |
 | `internal/webui` | The calibration page. Everything it draws is computed in Go and sent to it, so the picture on screen and the picture on the wall come from one frame. Embedded with `go:embed`: the deploy target is a Go binary, so `go install` must stay the whole installation. |
 | `internal/ui` | The shared styles, and the check for whether output is a terminal. Every live view has a plain counterpart, because a progress bar written to a pipe is a stream of escape codes. |

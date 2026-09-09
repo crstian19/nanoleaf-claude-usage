@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crstian19/nanoleaf-claude-usage/internal/render"
+	"github.com/crstian19/nanoleaf-claude-usage/internal/shapes"
 	"github.com/crstian19/nanoleaf-claude-usage/pkg/nanoleaf"
 )
 
@@ -32,6 +33,18 @@ func corners(t *testing.T, points string) []point {
 		out = append(out, point{X: px, Y: py})
 	}
 	return out
+}
+
+// realLayout is the arrangement this program was written against, as its own
+// device reports it. It lives with the samples so that the drawing tests and
+// the tiling tests measure the same wall.
+func realLayout(t *testing.T) nanoleaf.Layout {
+	t.Helper()
+	sample, err := shapes.Named("triangles-zigzag")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sample.Layout
 }
 
 // screenCentre averages a polygon's corners.
@@ -70,7 +83,7 @@ func panelView(t *testing.T, snap Snapshot, id int) PanelView {
 // box, the drawing would zoom in and out as the mouse moved, which reads as
 // the page being broken rather than as the shape turning.
 func TestExtentSurvivesRotation(t *testing.T) {
-	pic, err := newPicture(realLayout())
+	pic, err := newPicture(realLayout(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +115,7 @@ func TestExtentSurvivesRotation(t *testing.T) {
 // In screen coordinates, where Y grows downwards, adding 90 degrees maps
 // (x, y) to (y, -x).
 func TestScreenCoordinatesTurnCounterClockwise(t *testing.T) {
-	pic, err := newPicture(realLayout())
+	pic, err := newPicture(realLayout(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +135,7 @@ func TestScreenCoordinatesTurnCounterClockwise(t *testing.T) {
 // colours instead of the page working them out: the shape on screen has to be
 // the shape on the wall.
 func TestPageAndWallGetTheSamePicture(t *testing.T) {
-	pic, err := newPicture(realLayout())
+	pic, err := newPicture(realLayout(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +176,7 @@ func TestPageAndWallGetTheSamePicture(t *testing.T) {
 // from Go, like every other coordinate, so that the browser does no geometry
 // of its own.
 func TestTheLabelSitsOnItsPanel(t *testing.T) {
-	pic, err := newPicture(realLayout())
+	pic, err := newPicture(realLayout(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +194,7 @@ func TestTheLabelSitsOnItsPanel(t *testing.T) {
 // TestGaugeModeShowsTheRealDisplay checks the other picture: a full gauge
 // lights every panel, which the calibration pattern never does.
 func TestGaugeModeShowsTheRealDisplay(t *testing.T) {
-	pic, err := newPicture(realLayout())
+	pic, err := newPicture(realLayout(t))
 	if err != nil {
 		t.Fatal(err)
 	}

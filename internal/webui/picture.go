@@ -92,14 +92,17 @@ type PanelView struct {
 	Label [2]float64 `json:"label"`
 }
 
+// point is a place in the drawing.
+type point struct{ X, Y float64 }
+
 // picture renders both halves of the tool: the frame that goes to the panels
 // and the drawing that goes to the page.
 //
 // One object owns both so they cannot fall out of step. It is not safe for
 // concurrent use; the server keeps it inside its own loop.
 type picture struct {
-	layout  nanoleaf.Layout
-	drawing drawing
+	layout   nanoleaf.Layout
+	outliner render.Outliner
 
 	// extent is computed once, from a bound that rotation cannot change.
 	extent float64
@@ -121,8 +124,8 @@ func newPicture(l nanoleaf.Layout) (*picture, error) {
 		return nil, fmt.Errorf("webui: the device reported %d panels and none of them can be lit", len(l.Panels))
 	}
 
-	d := newDrawing(wall)
-	p := &picture{layout: l, drawing: d, extent: viewExtent(wall, d)}
+	outliner := render.NewOutliner(wall)
+	p := &picture{layout: l, outliner: outliner, extent: viewExtent(wall, outliner)}
 	p.load(0)
 	return p, nil
 }
@@ -167,7 +170,7 @@ func (p *picture) snapshot(v view, frame nanoleaf.Frame) Snapshot {
 		panels = append(panels, PanelView{
 			ID:     wp.Panel.ID,
 			Shape:  nanoleaf.ShapeName(wp.Panel.ShapeType),
-			Points: svgPoints(p.drawing.outline(wp), p.center),
+			Points: svgPoints(p.outliner.Outline(wp), p.center),
 			Color:  hexColor(frame[wp.Panel.ID]),
 			Order:  order[wp.Panel.ID],
 			Label:  [2]float64{wp.X - p.center.X, p.center.Y - wp.Y},
@@ -188,7 +191,7 @@ func (p *picture) snapshot(v view, frame nanoleaf.Frame) Snapshot {
 // svgPoints writes corners as an SVG polygon attribute, moving the shape to
 // the origin and flipping Y, which is the only difference between wall
 // coordinates and screen ones.
-func svgPoints(pts []point, center point) string {
+func svgPoints(pts []render.Corner, center point) string {
 	var b strings.Builder
 	for i, pt := range pts {
 		if i > 0 {
@@ -234,13 +237,13 @@ func drawnCenter(w render.Wall) point {
 // from those distances only, plus the offset between the centre of rotation
 // and the centre the picture is drawn about. Both terms survive any rotation,
 // so the frame never moves.
-func viewExtent(w render.Wall, d drawing) float64 {
+func viewExtent(w render.Wall, outliner render.Outliner) float64 {
 	pivot := rotationCenter(w)
 	usable, _ := w.Lights()
 
 	var reach float64
 	for _, wp := range usable {
-		for _, c := range d.outline(wp) {
+		for _, c := range outliner.Outline(wp) {
 			reach = math.Max(reach, math.Hypot(c.X-pivot.X, c.Y-pivot.Y))
 		}
 	}
