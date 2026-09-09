@@ -1,0 +1,47 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - exhaustive
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+    - wastedassign
+  settings:
+    exhaustive:
+      # A default case must not excuse a missing one. The daemon translates
+      # activity.Phase into render.Phase, and a phase added later would
+      # otherwise silently render as idle.
+      default-signifies-exhaustive: false
+    gosec:
+      excludes:
+        # Flags the *name* of an environment variable as a hardcoded
+        # credential: the config constants are variable names, not secrets.
+        - G101
+  exclusions:
+    rules:
+      # Test helpers build fixtures with weak primitives and dial their own
+      # sockets on purpose.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/crstian19/nanoleaf-claude-usage)
