@@ -52,22 +52,13 @@ const quiet = 0
 func highlightRange(base Color) (least, most float64) {
 	least, most = math.Inf(1), 0
 	for i := range 41 {
-		v := light(base.Highlight(float64(i) / 40).RGB())
+		g := float64(i) / 40
+		// Includes the absolute glow, because that is what the scene
+		// adds: a ceiling computed without it comes out too low.
+		v := light(base.Highlight(g).Scale(1 + waveGlow*g).RGB())
 		least, most = math.Min(least, v), math.Max(most, v)
 	}
 	return least, most
-}
-
-// dimFloorByteRatio is how much of a band's light survives the gauge's dim
-// floor, in byte terms rather than linear ones -- dimFloor is a fraction of
-// LINEAR light and the output is gamma-encoded, so 5.5% of the light is about
-// 26% of the byte.
-func dimFloorByteRatio(base Color) float64 {
-	full := light(base.RGB())
-	if full == 0 {
-		return 0
-	}
-	return light(base.Scale(dimFloor).RGB()) / full
 }
 
 // byOrder indexes a frame by each panel's rank from the bottom.
@@ -107,10 +98,10 @@ func TestBandsLightInOrder(t *testing.T) {
 			// could be a fixed number -- dimFloor is a fraction of
 			// LINEAR light and the output is gamma-encoded, so 5.5%
 			// of the light is about 26% of the byte.
-			// The dimmest a spent band gets, and the brightest an
-			// unspent one gets, both measured across the sweep.
-			_, dimMost := highlightRange(base)
-			dim := dimMost * dimFloorByteRatio(base)
+			// The brightest an unspent band gets: the dim floor plus
+			// the absolute glow, with the highlight's own colour
+			// change on top.
+			dim := light(base.Highlight(1).Scale(dimFloor + waveGlow).RGB())
 
 			litEnough := litLeast * 0.98
 
@@ -118,7 +109,7 @@ func TestBandsLightInOrder(t *testing.T) {
 			case order < lit && got < litEnough:
 				t.Errorf("level %.3f: band %d should be lit but is at %.0f, below the sweep's floor of %.0f",
 					level, order, got, litEnough)
-			case order > lit && got > dim*1.25:
+			case order > lit && got > dim*1.05:
 				t.Errorf("level %.3f: band %d should be dim (~%.0f) but is at %.0f",
 					level, order, dim, got)
 			}
@@ -655,5 +646,53 @@ func TestRainbowUsesTheWholeGamut(t *testing.T) {
 	// stretch of blue-purple is genuinely limited to around the old value.
 	if better < 300 {
 		t.Errorf("only %d of 360 hues are more saturated than the old fixed chroma", better)
+	}
+}
+
+// TestHighlightCannotDisguiseTheLevel is the constraint that sets the
+// highlight's size, and it has to compare across bands rather than within
+// one: every panel is on the wall at the same time, so the case that decides
+// readability is an unspent band with the highlight on it beside a spent band
+// without.
+//
+// Measured in the bytes that reach the panels, not in the linear values the
+// constants are written in -- gamma makes the two very different, and an
+// earlier value that looked safe linearly brought the two within 2% of each
+// other on the wall.
+func TestHighlightCannotDisguiseTheLevel(t *testing.T) {
+	const n = 9
+
+	worst := math.Inf(1)
+	for spentBand := range n {
+		spent := light(budgetColour(bandOf(spentBand, n).centre).RGB())
+
+		for unspentBand := range n {
+			base := budgetColour(bandOf(unspentBand, n).centre)
+			unspent := light(base.Highlight(1).Scale(dimFloor + waveGlow).RGB())
+			if unspent > 0 {
+				worst = math.Min(worst, spent/unspent)
+			}
+		}
+	}
+
+	if worst < 1.8 {
+		t.Errorf("a spent band is only %.2fx an unspent one under the highlight; the gauge stops being countable", worst)
+	}
+}
+
+// TestHighlightMovesAnEmptyGauge is the other half, and the complaint that
+// prompted an absolute glow in the first place: with the gauge nearly empty
+// almost every band sits at the dim floor, and a highlight scaled by the fill
+// was multiplied into invisibility there.
+func TestHighlightMovesAnEmptyGauge(t *testing.T) {
+	const n = 9
+	base := budgetColour(bandOf(4, n).centre)
+
+	plain := light(base.Scale(dimFloor).RGB())
+	lit := light(base.Highlight(1).Scale(dimFloor + waveGlow).RGB())
+
+	if lit < plain*1.5 {
+		t.Errorf("the highlight only moves an unspent band from %.0f to %.0f; it will not read as travelling",
+			plain, lit)
 	}
 }
