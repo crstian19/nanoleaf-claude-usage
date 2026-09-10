@@ -1,0 +1,54 @@
+version: 2
+
+project_name: nanoclaude
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: nanoclaude
+    main: ./cmd/nanoclaude
+    binary: nanoclaude
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [README.md, LICENSE]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Other
+      order: 2
+  filters:
+    exclude: ['^docs:', '^test:', '^chore:', '^ci:']
+
+release:
+  footer: |
+    Shows how much of your Claude Code session you have used, on a wall of
+    Nanoleaf panels. It runs on your own machine and talks to the panels over
+    your own network; the usage figure comes from a cache a status line has
+    already fetched.
+
+    Start with `nanoclaude setup`.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/charmbracelet/fang"
@@ -13,6 +14,29 @@ import (
 
 // version is overridden at build time via -ldflags.
 var version = "dev"
+
+// buildVersion is what `nanoclaude --version` reports.
+//
+// A release sets version through -ldflags and `just build` sets it from git,
+// but neither happens for `go install`, which is how the README tells people
+// to install this. So the module version the toolchain stamps into the binary
+// is the fallback. Without it every installed copy calls itself "dev", and a
+// bug report cannot say which one it came from.
+func buildVersion() string {
+	if version != "dev" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return version
+	}
+	// "(devel)" is what a build from a working tree reports, which is no
+	// more use than "dev" and less honest about it.
+	if info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return version
+	}
+	return info.Main.Version
+}
 
 func main() {
 	// os.Exit skips deferred calls, so the signal handler is released in
@@ -27,7 +51,7 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := fang.Execute(ctx, newRootCmd(), fang.WithVersion(version)); err != nil {
+	if err := fang.Execute(ctx, newRootCmd(), fang.WithVersion(buildVersion())); err != nil {
 		return 1
 	}
 	return 0

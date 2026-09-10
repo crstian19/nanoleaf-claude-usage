@@ -4,6 +4,8 @@
 
 <h1 align="center">nanoleaf-claude-usage</h1>
 
+[![CI](https://github.com/crstian19/nanoleaf-claude-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/crstian19/nanoleaf-claude-usage/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/crstian19/nanoleaf-claude-usage)](https://github.com/crstian19/nanoleaf-claude-usage/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/crstian19/nanoleaf-claude-usage.svg)](https://pkg.go.dev/github.com/crstian19/nanoleaf-claude-usage)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/crstian19/nanoleaf-claude-usage)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -22,10 +24,16 @@ row or a grid.
 
 ## Install
 
+Download a binary from
+[releases](https://github.com/crstian19/nanoleaf-claude-usage/releases), or:
+
 ```sh
 go install github.com/crstian19/nanoleaf-claude-usage/cmd/nanoclaude@latest
 nanoclaude setup
 ```
+
+`nanoclaude --version` reports which build you have. A release says its tag, and
+a copy installed with `go install` says the module version it came from.
 
 `setup` does the whole job. It finds the panels on your network and pairs with
 them. Then it writes the configuration file, checks that the shape is the
@@ -325,6 +333,21 @@ hook. Systemd adds a restart on failure and a sandbox. Set
 Read `docs/architecture.md` before you change the rendering or the wire
 protocol. It records the faults behind the current design, and several of them
 looked correct until a measurement showed otherwise.
+
+### Releases
+
+Tags are the versions, and they follow semantic versioning. Pushing one runs
+GoReleaser, which builds for Linux, macOS and Windows on both architectures
+and writes the release notes from the commits:
+
+```sh
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+The commit messages become the notes, which is what the Conventional Commits
+hook is for. `feat:` and `fix:` are grouped under their own headings, and
+`docs:`, `test:`, `chore:` and `ci:` are left out.
 
 ## License
 
