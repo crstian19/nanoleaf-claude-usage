@@ -16,14 +16,15 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
-    goos: [linux, darwin, windows]
+    # Linux and macOS only. The daemon holds an advisory file lock and
+    # detaches itself with setsid, and it signals the running copy to stop;
+    # none of that has a Windows equivalent here, and a release that shipped
+    # a Windows binary would ship one that cannot start.
+    goos: [linux, darwin]
     goarch: [amd64, arm64]
 
 archives:
   - formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
     files: [README.md, LICENSE]
 
 checksum:

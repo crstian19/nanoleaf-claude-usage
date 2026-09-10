@@ -24,7 +24,7 @@ row or a grid.
 
 ## Install
 
-Download a binary from
+Linux and macOS. Download a binary from
 [releases](https://github.com/crstian19/nanoleaf-claude-usage/releases), or:
 
 ```sh
@@ -34,6 +34,10 @@ nanoclaude setup
 
 `nanoclaude --version` reports which build you have. A release says its tag, and
 a copy installed with `go install` says the module version it came from.
+
+There is no Windows build. The daemon takes an advisory file lock to keep one
+copy running, detaches itself into its own session, and signals the running
+copy to stop. None of those has an equivalent here on Windows.
 
 `setup` does the whole job. It finds the panels on your network and pairs with
 them. Then it writes the configuration file, checks that the shape is the
