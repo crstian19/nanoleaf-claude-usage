@@ -102,6 +102,15 @@ type Options struct {
 	// Rotation is the angle the session starts at.
 	Rotation int
 
+	// OpenOn is the shape the page starts on, by name. Empty starts on
+	// the first one offered.
+	//
+	// Separate from the order of Shapes because a list has a first entry
+	// and a page has a starting point, and they are not always the same:
+	// asking for one arrangement by name should not move it to the top of
+	// everybody's list.
+	OpenOn string
+
 	// Open takes the panels over. It is called once, when Run starts, and
 	// again whenever the device drops the stream.
 	//
@@ -221,11 +230,21 @@ func New(ctx context.Context, o Options) (*Server, error) {
 		if o.Open != nil {
 			return nil, errors.New("webui: a wall the page builds cannot be painted on a device")
 		}
-		// Offered last, after the arrangements that already exist.
-		o.Shapes = append(o.Shapes, Shape{Name: BuildShape, Label: buildLabel})
+		// Offered first, and so the one the page opens on: a wall
+		// somebody builds is the point of the page, and the samples
+		// are what it can be compared against.
+		o.Shapes = append([]Shape{{Name: BuildShape, Label: buildLabel}}, o.Shapes...)
 	}
 	if o.Port < 0 || o.Port > 65535 {
 		return nil, fmt.Errorf("webui: port %d is not a port number", o.Port)
+	}
+
+	opening := o.Shapes[0].Name
+	if o.OpenOn != "" {
+		if !shapeOffered(o.Shapes, o.OpenOn) {
+			return nil, fmt.Errorf("webui: no shape called %q to open on", o.OpenOn)
+		}
+		opening = o.OpenOn
 	}
 
 	pics := make(map[string]*picture, len(o.Shapes))
@@ -271,7 +290,7 @@ func New(ctx context.Context, o Options) (*Server, error) {
 		done:       make(chan struct{}),
 		state: view{
 			Placing:  noPlacing,
-			Shape:    o.Shapes[0].Name,
+			Shape:    opening,
 			Rotation: render.WrapDegrees(o.Rotation),
 			Mode:     ModePattern,
 			Level:    0.6,
@@ -281,12 +300,22 @@ func New(ctx context.Context, o Options) (*Server, error) {
 	if len(o.Build) > 0 {
 		s.build = newEditor(o.Build)
 	}
-	if first := pics[o.Shapes[0].Name]; first != nil {
+	if first := pics[opening]; first != nil {
 		s.snap = first.snapshot(s.state, first.frame(s.state, 0))
 	} else {
 		s.snap = emptySnapshot(s.state, s.build.frameSide())
 	}
 	return s, nil
+}
+
+// shapeOffered reports whether a name is one of the shapes on offer.
+func shapeOffered(shapes []Shape, name string) bool {
+	for _, shape := range shapes {
+		if shape.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // newSecrets makes the two codes a session needs.

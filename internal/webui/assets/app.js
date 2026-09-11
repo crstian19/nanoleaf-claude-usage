@@ -168,6 +168,10 @@ function draw(snap) {
 
   drawSpots(snap.spots || []);
 
+  // An empty wall is a black square with nothing to explain it.
+  el("empty-hint").textContent =
+    snap.editing && panels.length === 0 ? "Drag a panel here to start" : "";
+
   const trouble = el("trouble");
   if (snap.trouble) {
     trouble.textContent = `The panels are refusing frames: ${snap.trouble}`;
@@ -570,9 +574,16 @@ function facts(info) {
   }
   el("fighting").hidden = !info.displayRunning;
 
-  // A sample arrangement is nobody's wall: there is nothing to send a
-  // picture to, and no angle worth writing down.
-  if (!info.live) {
+  // Three things this page can be, and they do not read the same. A wall
+  // being built is nobody's yet, a sample is somebody else's, and the panels
+  // on your own wall are the only ones a picture is sent to.
+  const building = Boolean(info.buildShape) && info.shape === info.buildShape;
+  if (building) {
+    document.querySelector("h1").textContent = "Build a wall and see the display on it";
+    el("intro").textContent =
+      "Drag panels from the palette onto the wall. Nothing is sent to a device, and the " +
+      "display is drawn on whatever you build: green at the bottom of the shape, red at the top.";
+  } else if (!info.live) {
     document.querySelector("h1").textContent = "See the display on other shapes";
     el("intro").textContent =
       "This is a sample arrangement, so the page is the whole display and nothing is being " +
@@ -580,7 +591,6 @@ function facts(info) {
   }
   el("save").hidden = !info.canSave;
 
-  const building = Boolean(info.buildShape) && info.shape === info.buildShape;
   el("build-card").hidden = !building;
   if (!building) disarmQuietly();
   if (building) {

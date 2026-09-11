@@ -384,3 +384,68 @@ func TestOnlyTheKindsThatFitAreOffered(t *testing.T) {
 		}
 	}
 }
+
+// TestTheWallToBuildComesFirst is what the page opens on: an empty wall with
+// the palette beside it, rather than somebody else's arrangement.
+func TestTheWallToBuildComesFirst(t *testing.T) {
+	s, err := New(t.Context(), Options{
+		Shapes: []Shape{
+			{Name: "sample", Label: "a sample", Layout: realLayout(t)},
+			{Name: "other", Label: "another", Layout: realLayout(t)},
+		},
+		Build: buildKinds(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	var info Info
+	if err := json.Unmarshal(call(t, s, http.MethodGet, s.pageURL()+"info", "").Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if len(info.Shapes) != 3 || info.Shapes[0].Name != BuildShape {
+		t.Errorf("the list starts with %+v, want the wall to build", info.Shapes)
+	}
+	if info.Shape != BuildShape {
+		t.Errorf("the page opens on %q, want the wall to build", info.Shape)
+	}
+	if s.snapshot().Shape != BuildShape {
+		t.Errorf("the first picture is of %q", s.snapshot().Shape)
+	}
+}
+
+// TestASessionCanOpenOnANamedShape covers `preview --shape`, which says where
+// to start without changing the order everybody else sees.
+func TestASessionCanOpenOnANamedShape(t *testing.T) {
+	s, err := New(t.Context(), Options{
+		Shapes: []Shape{
+			{Name: "first", Label: "the first", Layout: realLayout(t)},
+			{Name: "second", Label: "the second", Layout: realLayout(t)},
+		},
+		OpenOn: "second",
+		Build:  buildKinds(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	var info Info
+	if err := json.Unmarshal(call(t, s, http.MethodGet, s.pageURL()+"info", "").Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.Shape != "second" {
+		t.Errorf("the page opens on %q, want the shape it was told", info.Shape)
+	}
+	if info.Shapes[0].Name != BuildShape {
+		t.Errorf("the list starts with %q: opening on a shape moved it", info.Shapes[0].Name)
+	}
+
+	if _, err := New(t.Context(), Options{
+		Shapes: []Shape{{Name: "first", Layout: realLayout(t)}},
+		OpenOn: "nothing-like-it",
+	}); err == nil {
+		t.Error("a session was allowed to open on a shape it does not offer")
+	}
+}

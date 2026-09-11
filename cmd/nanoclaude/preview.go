@@ -129,6 +129,7 @@ func previewInBrowser(cmd *cobra.Command, shapeName string, rotation, port int, 
 
 	server, err := webui.New(ctx, webui.Options{
 		Shapes:   offered,
+		OpenOn:   shapeName,
 		Rotation: rotation,
 		Build:    buildableKinds(),
 		Port:     port,
@@ -187,11 +188,13 @@ func buildableKinds() []webui.Kind {
 	}
 }
 
-// offeredShapes is every sample, with the requested one first so the page
-// opens on it.
-func offeredShapes(first string) ([]webui.Shape, error) {
-	if first != "" {
-		if _, err := shapes.Named(first); err != nil {
+// offeredShapes is every sample, in the order this package lists them.
+//
+// A shape asked for by name is opened on rather than moved to the front: the
+// list is the same for everybody, and the page starts wherever it was told.
+func offeredShapes(wanted string) ([]webui.Shape, error) {
+	if wanted != "" {
+		if _, err := shapes.Named(wanted); err != nil {
 			return nil, fmt.Errorf("preview: %w", err)
 		}
 	}
@@ -199,12 +202,7 @@ func offeredShapes(first string) ([]webui.Shape, error) {
 	all := shapes.All()
 	offered := make([]webui.Shape, 0, len(all))
 	for _, sample := range all {
-		shape := webui.Shape{Name: sample.Name, Label: sample.Label, Layout: sample.Layout}
-		if sample.Name == first {
-			offered = append([]webui.Shape{shape}, offered...)
-			continue
-		}
-		offered = append(offered, shape)
+		offered = append(offered, webui.Shape{Name: sample.Name, Label: sample.Label, Layout: sample.Layout})
 	}
 	return offered, nil
 }

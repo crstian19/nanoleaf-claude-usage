@@ -92,6 +92,14 @@ aside { display: grid; gap: 1.5rem; }
   pointer-events: none;
 }
 
+#empty-hint {
+  fill: var(--muted);
+  font: 500 26px ui-sans-serif, system-ui, sans-serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
 /* The floor line is the whole point of the drawing: it says which edge of the
    picture is the edge of the room. */
 .ground {
