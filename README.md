@@ -10,17 +10,14 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/crstian19/nanoleaf-claude-usage)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Show how much of your Claude Code session you have used, on a wall of Nanoleaf
-panels.
+Your Claude Code usage, on a wall of Nanoleaf panels.
 
-The panels work as a gauge. Each panel owns an equal share of the session
-allowance. A panel lights up when you spend its share. Its color tells you where it
-sits on the scale, from green at the bottom to coral at the top. You read the
-display by counting the lit panels. While Claude works, the whole
-shape turns into a rainbow that sweeps across it.
+Each panel owns an equal share of the session allowance and lights up when you
+spend it, green at the bottom of the shape through to coral at the top. You
+read the display by counting the lit panels. While Claude works, the whole
+shape turns into a rainbow.
 
-The display fits the shape you mounted your panels in. It does not assume a
-row or a grid.
+The display follows the shape you mounted, whatever it is.
 
 ## Install
 
@@ -32,18 +29,9 @@ go install github.com/crstian19/nanoleaf-claude-usage/cmd/nanoclaude@latest
 nanoclaude setup
 ```
 
-`nanoclaude --version` reports which build you have. A release says its tag, and
-a copy installed with `go install` says the module version it came from.
-
-There is no Windows build. The daemon takes an advisory file lock to keep one
-copy running, detaches itself into its own session, and signals the running
-copy to stop. None of those has an equivalent here on Windows.
-
-`setup` does the whole job. It finds the panels on your network and pairs with
-them. Then it writes the configuration file, checks that the shape is the
-right way up, and installs the Claude Code hooks that start the display.
-
-Every step is also a command of its own, so you can do any of them by hand:
+`setup` finds the panels, pairs with them, writes the configuration, checks
+the shape is the right way up, and installs the Claude Code hooks. Each step
+is also its own command:
 
 ```sh
 nanoclaude discover                  # find the panels
@@ -52,108 +40,57 @@ nanoclaude calibrate                 # line the shape up with your wall
 nanoclaude hooks install             # let Claude Code start the display
 ```
 
-`discover` scans your own networks for the Nanoleaf API port. It does not use
-mDNS, because reaching an mDNS advert needs a resolver running on the machine,
-and that is not a safe assumption. A sweep of a /24 takes under a second.
+To pair, hold the power button on the controller for 5 to 7 seconds, until
+the LEDs flash. The panels hold several tokens at once, so this does not
+revoke access for Home Assistant or for the Nanoleaf app.
 
-To pair, hold the power button on the controller for 5 to 7 seconds, until the
-LEDs flash. The panels hold several tokens at once, so this does not revoke
-access for Home Assistant or for the Nanoleaf app.
+`hooks install` edits `~/.claude/settings.json` in place. It keeps the hooks
+already there, writes a backup first, and changes nothing when run twice.
 
-`calibrate` opens a page on this machine. The page draws your own panels at
-the angles they are mounted at, and lights the bottom of the shape green and
-the top red. Drag the shape until it matches the wall, then press Save.
+## Calibrating
 
-The panels report where they are, and the device reports how the whole
-arrangement is rotated. Nothing tells it which way is up in your room, so this
-is the only way to be sure.
+The device knows where its panels are relative to each other. It does not know
+which way is up in your room.
 
-You never have to name an angle. That was the earlier advice and it was not
-something a person can do. Working out the difference took a photograph and a
-statistical fit of the panel positions.
+`nanoclaude calibrate` opens a page on this machine that draws your own
+panels, lights the bottom of the shape green and the top red, and follows your
+mouse as you turn it. When it matches the wall, press Save.
 
-The page is served on the loopback interface only, and the address opens once.
-It has to be passed to your browser, where other programs on the machine can
-read it. So a second visit is refused, and you run the command again. The
-session stops when you close the tab.
+The page is on the loopback interface, and its address works once, because the
+address is handed to your browser where other programs can read it. Closing
+the tab ends the session. `--tui` does the same job with the arrow keys.
 
-Add `--tui` to do the same job in the terminal with the arrow keys. That draws
-the shape as coloured blocks instead of as your panels.
+The same page can paint the real display at any level you choose, which is how
+to look at the gauge without spending an allowance to get there.
 
-The page can also paint the real display at any level you choose. Use it to
-look at the gauge without waiting to spend a real allowance.
-
-### Other shapes
-
-Every wall is different, so the display has to read well on more than one.
-`nanoclaude preview --web` opens the same page over a set of sample
-arrangements:
+## Other shapes
 
 ```sh
-nanoclaude preview --web                        # all of them, pick from the page
+nanoclaude preview --web                        # every sample, pick from the page
 nanoclaude preview --shape hexagons-honeycomb   # one of them, in the terminal
 ```
 
-The samples cover the whole Nanoleaf range:
+Fifteen sample walls covering the range: Shapes triangles in rows, blocks and
+zigzags, mini triangles, both sizes mixed, hexagons in honeycombs and columns,
+Elements hexagons, Canvas squares, Aurora Light Panels, a Lines zigzag, the 4D
+lightstrip round a screen, and a Skylight ceiling. Nothing reaches a device in
+this mode, so it is safe to run while the display works.
 
-- Shapes: triangles in a row, in a block and in the zigzag this was written
-  on, mini triangles, both sizes together, hexagons in a honeycomb, hexagons
-  in a column, and hexagons ringed with mini triangles.
-- Elements: hexagons in a honeycomb, and the hexagon that lights six corners.
-- Canvas: squares in a grid, with the control square and a passive one.
-- Light Panels: the Aurora triangles, with a Rhythm module.
-- Lines: five bars in a zigzag, with the connectors between them.
-- The 4D lightstrip, running round a screen.
-- Skylight: panels on a ceiling.
+The last entry is an empty wall. Drag a panel onto it and it sticks to
+whichever edge you drop it on, with every place it could land drawn as you
+drag. Panels go on in any order, an edge that is taken will not take another,
+and `Undo`, `Clear` and a tick box for removing panels are there for the rest.
 
-Nothing is sent to a device in this mode, and nothing can be saved. It is
-safe to run while the display works.
-
-### Build your own
-
-The last entry in the list is an empty wall. Drag a panel onto it and it
-sticks to whichever edge you drop it on.
-
-Every place the panel can land is drawn while you drag, as the outline it
-would have there. Drop it on one of them and that is where it goes. An edge
-that already has a panel on it will not take another, so panels can go on in
-any order. `Undo` and `Clear` go back, and one tick box turns a click into
-taking a panel off.
-
-The palette holds every panel in the range that goes together edge to edge.
-Panels only clip to their own product line, and each is built at its own edge
-length. The ones with nowhere to go are greyed out as you build, so a Canvas
-square will not join a wall of Shapes triangles.
-
-The sizes are the published ones. A Shapes triangle has an edge of 134 and a
-hexagon 67. So two mini triangles fit along one triangle edge, and a hexagon
-sits on half of it.
-
-Lines and the lightstrip are not in the palette. They join end to end at
-connectors rather than edge to edge, at angles the connector decides, so
-there is a sample of each instead.
-
-Nothing here is worked out in the browser. The page asks where a panel could
-go, draws the answer, and says which edge you dropped it on. That way the
-wall you build is the wall the gauge is drawn on.
-
-A test then holds every sample to the rule a wall follows: panels as close as
-neighbours get share a whole edge. That is how a wrong corner angle is caught,
-because on screen it draws a heap of overlapping shapes instead of a wall.
-
-`hooks install` writes to `~/.claude/settings.json`. It keeps every hook that
-is already there and it writes a backup first. It also edits the file in
-place, so keys it does not touch keep their order. Run it again after an
-upgrade and it changes nothing.
+The palette offers every panel that goes together edge to edge. Panels only
+clip to their own product line, and each is built at its published size, so a
+Canvas square greys out on a wall of Shapes triangles. Lines and the lightstrip
+join at connectors rather than edges, so each gets a sample instead.
 
 ## Usage
 
-There is no service to enable and nothing to add to a startup file. Claude
-Code starts the display. The `SessionStart` hook starts it. Every other hook
-brings it back if it stopped. It shuts itself down after 20 minutes with no
-live session.
-
-You can also control it by hand:
+Claude Code starts the display: `SessionStart` brings it up and every other
+hook brings it back if it stopped. It shuts down after 20 minutes with no
+session. There is nothing to enable and nothing to add to a startup file.
 
 | Command | What it does |
 |---|---|
@@ -164,39 +101,30 @@ You can also control it by hand:
 | `nanoclaude run` | Run it in the foreground |
 | `nanoclaude discover` | Find Nanoleaf controllers on this network |
 | `nanoclaude pair` | Get an API token from panels in pairing mode |
-| `nanoclaude calibrate` | Open the page that turns the shape to match your wall |
+| `nanoclaude calibrate` | Turn the shape to match your wall |
 | `nanoclaude layout` | Print the panel positions and the scene coordinates |
-| `nanoclaude preview` | Draw a scene without touching the panels, on your shape or a sample |
+| `nanoclaude preview` | Draw a scene without touching the panels |
 | `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |
 | `nanoclaude brightness` | Report or set the panels' global brightness |
 
-`nanoclaude preview` runs without a device. It falls back to a sample
-arrangement, which is useful to adjust the look:
+`preview` runs without a device, on a sample shape, which is the way to tune
+the look:
 
 ```sh
 nanoclaude preview --budget 0.85 --phase tool --animate 8s
 ```
 
-Every command that draws a live view also has a plain form. A progress bar
-written to a pipe is a stream of escape codes. The program asks whether the
-output is a terminal, and prints one line instead.
+Every live view has a plain form for a pipe or a log.
 
-The daemon gives the panels back when it stops. It restores the effect and the
-power state that it found.
-
-It never changes the panels' global brightness. Every colour it sends is
-scaled by that value, so taking it over would give a predictable canvas, and
-that was tried and reverted: the value belongs to whoever set it, in the
-Nanoleaf app or in a home automation, and a daemon that restarts with every
-session would overwrite that choice several times an hour. Use
-`nanoclaude brightness` to set it on purpose.
+When the daemon stops it restores the effect and the power state it found. It
+never touches the panels' global brightness: that belongs to whoever set it,
+in the Nanoleaf app or in a home automation. Use `nanoclaude brightness` to
+change it on purpose.
 
 ## Configuration
 
-The daemon reads its own configuration file at `~/.config/nanoclaude/env`. It
-does this because a Claude Code hook starts it, and that hook knows nothing
-about panels or tokens. `nanoclaude setup` writes the file, and the variables
-below are all it understands.
+The daemon reads `~/.config/nanoclaude/env`, because the Claude Code hook that
+starts it knows nothing about panels or tokens. `nanoclaude setup` writes it.
 
 | Variable | What it sets |
 |---|---|
@@ -212,111 +140,79 @@ below are all it understands.
 | `NANOCLAUDE_IDLE_EXIT` | Time with no session before it shuts down. `0` never. |
 | `NANOCLAUDE_FPS` | Frame rate, from 1 to 60. |
 
-Secrets come from the file and from the environment, never from a flag, so
-they stay out of the output of `ps`.
+Secrets come from the file or the environment, never from a flag, so they stay
+out of `ps`.
 
 ### Home Assistant
 
-The display can wait for a switch in Home Assistant. Create an
-`input_boolean` helper and name it in `NANOCLAUDE_TOGGLE_ENTITY`. The daemon
-only reads that switch. It never calls a service, so a fault here cannot
-change anything else in your house.
+The display can wait for a switch. Create an `input_boolean` helper and name it
+in `NANOCLAUDE_TOGGLE_ENTITY`. The daemon only reads it and never calls a
+service, so a fault here cannot change anything else in your house.
 
-Use an `https` address for `HASS_SERVER`. A Home Assistant long-lived token
-has full access to the instance and it never expires. The daemon sends it on
-every poll, so plain `http` puts it on the network thousands of times a day.
-The daemon prints a warning at startup if the address is plain `http`.
+Use an `https` address for `HASS_SERVER`. A long-lived token has full access
+and never expires, and the daemon sends it on every poll. Plain `http` is
+warned about at startup.
 
 ## How it works
 
-### Where the number comes from
+### The number
 
-Claude Code knows the real figure. Its `/usage` screen reads an endpoint that
-reports the percentage of the session you have spent, and the time the session
-resets.
-
-By default this program does not call that endpoint. A status line already
-polls it every 60 seconds.
+Claude Code's `/usage` screen reads an endpoint that reports the percentage of
+the session spent and when it resets. That endpoint is rate limited hard, so
+this program does not call it by default. A status line is already polling it:
 [claude-pulse](https://github.com/NoobyGains/claude-pulse) writes the answer to
-`~/.cache/claude-status/cache.json`, and reading that file costs nothing. It
-needs no credentials, and it cannot get the account rate limited. The endpoint
-limits requests hard. Two requests in quick succession earned a 26 minute
-`Retry-After` during development.
+`~/.cache/claude-status/cache.json`, and reading a local file needs no
+credentials and cannot get the account throttled.
 
-Set `NANOCLAUDE_LIMITS=api` to call the endpoint directly, for a machine with
-no status line to read from. Set `NANOCLAUDE_LIMITS=off` to keep every request
-on your own network.
+`NANOCLAUDE_LIMITS=api` calls the endpoint directly, for a machine with no
+status line. `NANOCLAUDE_LIMITS=off` keeps every request on your own network.
 
-A real reading also works as an anchor. Between readings, the daemon adds the
-cost that `ccusage` reports from the local transcripts. That cost is a
-fallback, not the main source: the token count is about 98 percent cache
-reads, which are the cheapest tokens there are, so it mostly measures the
-length of the conversation. The anchor also teaches the daemon what a full
-session costs on your plan, which a fallback cannot work out on its own.
+Between readings the daemon adds the cost `ccusage` reports from the local
+transcripts. That figure is a fallback rather than the source: the token count
+is about 98 percent cache reads, so it mostly measures how long the
+conversation is. A real reading also tells the daemon what a full session costs
+on your plan.
 
-### Why the display fits your shape
+### The shape
 
-The device reports the position of every panel on the wall. The gauge fills
-from the bottom of that shape, and the rainbow sweeps along the shape's long
-axis. The program finds that axis with principal component analysis, a method
-that finds the direction the positions vary in most. Nothing in the code
-assumes a panel order or a panel count.
+The device reports where every panel sits. The gauge fills from the bottom of
+that shape and the rainbow runs along its long axis, which comes from a
+principal component analysis of the panel positions rather than from an
+assumed row or grid. Nothing in the code depends on panel order or count.
 
-The device also reports a global orientation, because panel coordinates come
-from the arrangement you built in the Nanoleaf app. That app does not know
-which way is up on your wall. The program undoes that orientation. It does not
-apply it again. On a real device at 302 degrees, the wrong sign put the
-vertical axis 116 degrees out, and the gauge climbed diagonally.
+The device also reports a global orientation, which comes from the arrangement
+you built in the Nanoleaf app rather than from your wall. The program undoes
+it, and `calibrate` covers the rest.
 
-### Panel models
+### Panels
 
-The device reports a shape number for every panel. All twenty numbers in
-Nanoleaf's documentation are named here, which is the whole range: Light
-Panels, Canvas, Shapes, Elements, Lines, the 4D lightstrip and Skylight.
+All twenty shape numbers in Nanoleaf's documentation are named: Light Panels,
+Canvas, Shapes, Elements, Lines, the 4D lightstrip and Skylight. Each is drawn
+at its own published edge length, since a Shapes triangle is 134 and a hexagon
+67, and Nanoleaf deprecated the single side length a device reports for that
+reason.
 
-Each shape is drawn at its own published edge length. A Shapes triangle has
-an edge of 134 and a hexagon 67. Nanoleaf deprecated the single side length a
-device reports, because one number cannot describe a wall that holds two
-sizes.
+Five pieces have no LEDs and are left out of every frame: the Rhythm module,
+the Shapes controller, a Lines connector, a controller cap and a power
+connector.
 
-Five pieces have no LEDs: the Rhythm module, the Shapes controller, a Lines
-connector, a controller cap and a power connector. They appear in a layout
-like any other panel. Lighting one puts a dead spot in the middle of every
-frame, so they are left out.
-
-A shape number that is not in the list is still rendered, and
-`nanoclaude layout` prints it with a note. Getting this wrong either way is
-equally bad. A real panel treated as a blank goes dark, and a blank treated
-as a panel does the same. If a panel this version does not know turns out to
-have no LEDs, put its number in `NANOCLAUDE_SKIP_SHAPES`.
+A shape number outside the list is still lit, and `nanoclaude layout` prints it
+with a note. If it turns out to have no LEDs, put the number in
+`NANOCLAUDE_SKIP_SHAPES`.
 
 ### Colors
 
-Both color scales are arcs in OKLCH, a color space where equal numbers look
-equally bright.
+Both scales are arcs in OKLCH, a color space where equal numbers look equally
+bright.
 
-The gauge holds lightness and chroma constant and moves only the hue. A scale
-must be even, because a band that looked brighter would read as more urgent.
-The cost is that the top of the scale is a warm coral and not a deep red. A
-deep red has a low lightness, so it cannot appear on an arc of constant
-lightness.
+The gauge moves only the hue, holding lightness and chroma fixed, so no band
+reads as more urgent than its neighbour. The price is a warm coral at the top
+instead of a deep red, which cannot exist at a constant lightness.
 
-The rainbow holds lightness constant and takes as much chroma as each hue can
-carry. A signal only has to be unmistakable, so any saturation left unused is
-waste. One chroma for the whole hue circle has to fit the most limited hue,
-which is about 0.13 here. The greens carry 0.48. The program measures the
-gamut boundary for each hue at startup instead.
-
-### Lifetime
-
-A Claude Code hook starts the daemon, and the daemon holds a lock so that
-three sessions do not start three daemons. The lock is a file lock, which the
-kernel releases however the process dies. A stale process id file would block
-every later start.
-
-Every hook brings the daemon back, not only `SessionStart`. Without that, the
-idle shutdown would be a trap. A session that stays open long enough for its
-state file to expire never fires `SessionStart` again.
+The rainbow keeps the lightness and takes all the chroma each hue can carry. A
+single chroma for the whole circle would have to fit the most limited hue,
+about 0.13 here, while the greens carry 0.48, so the gamut boundary is measured
+per hue at startup.
 
 ## Development
 
@@ -331,27 +227,23 @@ just logs       # follow the daemon
 Requires `ccusage` on `PATH`.
 
 `deploy/nanoclaude.service` runs the daemon under systemd instead of under a
-hook. Systemd adds a restart on failure and a sandbox. Set
-`NANOCLAUDE_IDLE_EXIT=0` there, so the daemon stays up.
+hook, which adds a restart on failure and a sandbox. Set
+`NANOCLAUDE_IDLE_EXIT=0` there.
 
-Read `docs/architecture.md` before you change the rendering or the wire
-protocol. It records the faults behind the current design, and several of them
-looked correct until a measurement showed otherwise.
+`docs/architecture.md` has the reasoning: the wire protocol, the color work,
+and the faults behind decisions that look arbitrary. Read it before changing
+the rendering.
 
 ### Releases
 
-Tags are the versions, and they follow semantic versioning. Pushing one runs
-GoReleaser, which builds for Linux, macOS and Windows on both architectures
-and writes the release notes from the commits:
+Tags are the versions. Pushing one builds Linux and macOS binaries for both
+architectures and writes the release notes from the commit messages, which is
+what the Conventional Commits hook is for:
 
 ```sh
 git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
 ```
-
-The commit messages become the notes, which is what the Conventional Commits
-hook is for. `feat:` and `fix:` are grouped under their own headings, and
-`docs:`, `test:`, `chore:` and `ci:` are left out.
 
 ## License
 
