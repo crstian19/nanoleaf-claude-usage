@@ -17,7 +17,7 @@ spend it, green at the bottom of the shape through to coral at the top. You
 read the display by counting the lit panels. While Claude works, the whole
 shape turns into a rainbow.
 
-The display follows the shape you mounted, whatever it is.
+The display follows the shape you mounted.
 
 ## Install
 
@@ -60,8 +60,8 @@ The page is on the loopback interface, and its address works once, because the
 address is handed to your browser where other programs can read it. Closing
 the tab ends the session. `--tui` does the same job with the arrow keys.
 
-The same page can paint the real display at any level you choose, which is how
-to look at the gauge without spending an allowance to get there.
+The same page paints the real display at any level you choose, so you can see
+what 90 percent looks like without spending it.
 
 ## Other shapes
 
@@ -70,7 +70,7 @@ nanoclaude preview --web                        # every sample, pick from the pa
 nanoclaude preview --shape hexagons-honeycomb   # one of them, in the terminal
 ```
 
-Fifteen sample walls covering the range: Shapes triangles in rows, blocks and
+Fifteen sample walls cover the range: Shapes triangles in rows, blocks and
 zigzags, mini triangles, both sizes mixed, hexagons in honeycombs and columns,
 Elements hexagons, Canvas squares, Aurora Light Panels, a Lines zigzag, the 4D
 lightstrip round a screen, and a Skylight ceiling. Nothing reaches a device in
@@ -88,7 +88,7 @@ join at connectors rather than edges, so each gets a sample instead.
 
 ## Usage
 
-Claude Code starts the display: `SessionStart` brings it up and every other
+Claude Code starts the display. `SessionStart` brings it up, and every other
 hook brings it back if it stopped. It shuts down after 20 minutes with no
 session. There is nothing to enable and nothing to add to a startup file.
 
@@ -107,8 +107,7 @@ session. There is nothing to enable and nothing to add to a startup file.
 | `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |
 | `nanoclaude brightness` | Report or set the panels' global brightness |
 
-`preview` runs without a device, on a sample shape, which is the way to tune
-the look:
+`preview` runs without a device, on a sample shape, for tuning the look:
 
 ```sh
 nanoclaude preview --budget 0.85 --phase tool --animate 8s
@@ -117,7 +116,7 @@ nanoclaude preview --budget 0.85 --phase tool --animate 8s
 Every live view has a plain form for a pipe or a log.
 
 When the daemon stops it restores the effect and the power state it found. It
-never touches the panels' global brightness: that belongs to whoever set it,
+never touches the panels' global brightness. That belongs to whoever set it,
 in the Nanoleaf app or in a home automation. Use `nanoclaude brightness` to
 change it on purpose.
 
@@ -159,7 +158,7 @@ warned about at startup.
 
 Claude Code's `/usage` screen reads an endpoint that reports the percentage of
 the session spent and when it resets. That endpoint is rate limited hard, so
-this program does not call it by default. A status line is already polling it:
+this program does not call it by default. A status line is already polling it.
 [claude-pulse](https://github.com/NoobyGains/claude-pulse) writes the answer to
 `~/.cache/claude-status/cache.json`, and reading a local file needs no
 credentials and cannot get the account throttled.
@@ -168,17 +167,16 @@ credentials and cannot get the account throttled.
 status line. `NANOCLAUDE_LIMITS=off` keeps every request on your own network.
 
 Between readings the daemon adds the cost `ccusage` reports from the local
-transcripts. That figure is a fallback rather than the source: the token count
-is about 98 percent cache reads, so it mostly measures how long the
-conversation is. A real reading also tells the daemon what a full session costs
-on your plan.
+transcripts. That figure is a fallback. The token count is about 98 percent
+cache reads, so it mostly measures how long the conversation is. A real
+reading also tells the daemon what a full session costs on your plan.
 
 ### The shape
 
 The device reports where every panel sits. The gauge fills from the bottom of
 that shape and the rainbow runs along its long axis, which comes from a
-principal component analysis of the panel positions rather than from an
-assumed row or grid. Nothing in the code depends on panel order or count.
+principal component analysis of the panel positions. Nothing in the code
+depends on panel order or count.
 
 The device also reports a global orientation, which comes from the arrangement
 you built in the Nanoleaf app rather than from your wall. The program undoes
@@ -231,8 +229,8 @@ hook, which adds a restart on failure and a sandbox. Set
 `NANOCLAUDE_IDLE_EXIT=0` there.
 
 `docs/architecture.md` has the reasoning: the wire protocol, the color work,
-and the faults behind decisions that look arbitrary. Read it before changing
-the rendering.
+and the faults behind the current design. Read it before changing the
+rendering.
 
 ### Releases
 
