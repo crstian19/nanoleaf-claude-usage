@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/crstian19/nanoleaf-claude-usage/internal/render"
 )
 
 // TestBuildVersionPrefersTheStampedValue covers the version a released binary
@@ -68,5 +70,41 @@ func TestTheSweepWalksFromOneLevelToTheOther(t *testing.T) {
 	held := debugState{from: noSweep, budget: 0.42, sweep: 10 * time.Second}
 	if got := held.levelAt(5 * time.Second); got != 0.42 {
 		t.Errorf("a held level moved to %v", got)
+	}
+}
+
+// TestTheKeyboardModeRunsTheFillItWasAskedFor is the bug this had: a terminal
+// takes the keyboard path, and that path ignored --sweep and opened on a full
+// wall. Only a pipe ever saw the fill, which is why the tests missed it.
+func TestTheKeyboardModeRunsTheFillItWasAskedFor(t *testing.T) {
+	state := debugState{from: 0, budget: 1, sweep: 6 * time.Second}
+	m := newDebugModel(nil, nil, render.Geometry{}, state)
+
+	if m.sweepEnd.IsZero() {
+		t.Fatal("the keyboard mode opened with no fill running")
+	}
+	if got := m.level(); got > 0.05 {
+		t.Errorf("the fill opens at %v, want it to start from nothing", got)
+	}
+
+	// Halfway through.
+	m.sweepEnd = time.Now().Add(3 * time.Second)
+	if got := m.level(); got < 0.4 || got > 0.6 {
+		t.Errorf("halfway through the fill the wall is at %v, want about 0.5", got)
+	}
+
+	// And it stays full once the fill is done.
+	m.sweepEnd = time.Now().Add(-time.Second)
+	if got := m.level(); got != 1 {
+		t.Errorf("after the fill the wall is at %v, want 1", got)
+	}
+
+	// Asked to hold one level instead, it holds it from the first frame.
+	held := newDebugModel(nil, nil, render.Geometry{}, debugState{from: noSweep, budget: 0.4})
+	if !held.sweepEnd.IsZero() {
+		t.Error("a held state started a fill")
+	}
+	if got := held.level(); got != 0.4 {
+		t.Errorf("a held state opens at %v, want 0.4", got)
 	}
 }

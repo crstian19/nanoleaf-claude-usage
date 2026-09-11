@@ -288,19 +288,7 @@ func holdState(ctx context.Context, w io.Writer, stream webui.Stream,
 func driveState(cmd *cobra.Command, stream webui.Stream,
 	scene *render.Scene, geo render.Geometry, state debugState,
 ) error {
-	fill := state.sweep
-	if fill <= 0 {
-		fill = keySweep
-	}
-	m := &debugModel{
-		geo:    geo,
-		scene:  scene,
-		stream: stream,
-		start:  time.Now(),
-		budget: state.budget,
-		phase:  state.phase,
-		fill:   fill,
-	}
+	m := newDebugModel(stream, scene, geo, state)
 
 	final, err := tea.NewProgram(m, tea.WithContext(cmd.Context()),
 		tea.WithOutput(cmd.OutOrStdout())).Run()
@@ -311,6 +299,35 @@ func driveState(cmd *cobra.Command, stream webui.Stream,
 		return done.err
 	}
 	return nil
+}
+
+// newDebugModel is the wall as the keyboard first finds it.
+//
+// A fill asked for on the command line starts straight away, and the keys
+// take over when it finishes. Without that the keyboard mode ignored --sweep
+// and opened on a full wall, which is what a terminal got and a pipe did not.
+func newDebugModel(stream webui.Stream, scene *render.Scene,
+	geo render.Geometry, state debugState,
+) *debugModel {
+	fill := state.sweep
+	if fill <= 0 {
+		fill = keySweep
+	}
+
+	m := &debugModel{
+		geo:    geo,
+		scene:  scene,
+		stream: stream,
+		start:  time.Now(),
+		budget: state.budget,
+		phase:  state.phase,
+		fill:   fill,
+	}
+	if state.sweeping() {
+		m.sweepFrom = state.from
+		m.sweepEnd = time.Now().Add(state.sweep)
+	}
+	return m
 }
 
 // debugModel drives the wall from the keyboard.
