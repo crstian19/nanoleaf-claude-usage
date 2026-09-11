@@ -177,15 +177,35 @@ func previewInBrowser(cmd *cobra.Command, shapeName string, rotation, port int, 
 // line, so a Canvas square will not go on a Shapes triangle, and the page is
 // told why by the same words this list is written in.
 func buildableKinds() []webui.Kind {
-	return []webui.Kind{
-		{Shape: nanoleaf.ShapeTriangle, Label: "Shapes triangle"},
-		{Shape: nanoleaf.ShapeHexagon, Label: "Shapes hexagon"},
-		{Shape: nanoleaf.ShapeMiniTriangle, Label: "Mini triangle"},
-		{Shape: nanoleaf.ShapeElementsHexagon, Label: "Elements hexagon"},
-		{Shape: nanoleaf.ShapeSquare, Label: "Canvas square"},
-		{Shape: nanoleaf.ShapeLightPanel, Label: "Light Panel"},
-		{Shape: nanoleaf.ShapeSkylight, Label: "Skylight panel"},
+	offered := []int{
+		nanoleaf.ShapeTriangle,
+		nanoleaf.ShapeHexagon,
+		nanoleaf.ShapeMiniTriangle,
+		nanoleaf.ShapeElementsHexagon,
+		nanoleaf.ShapeSquare,
+		nanoleaf.ShapeLightPanel,
+		nanoleaf.ShapeSkylight,
 	}
+
+	kinds := make([]webui.Kind, 0, len(offered))
+	for _, shapeType := range offered {
+		kinds = append(kinds, webui.Kind{Shape: shapeType, Label: kindLabel(shapeType)})
+	}
+	return kinds
+}
+
+// kindLabel is a shape's name as a button says it.
+//
+// Taken from the protocol package rather than written out again, so a panel
+// is called the same thing on a button, in a layout listing and in the
+// sentence that refuses to put it somewhere. Four of these are triangles and
+// the names are what say which.
+func kindLabel(shapeType int) string {
+	name := nanoleaf.ShapeName(shapeType)
+	if name == "" {
+		return name
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 // offeredShapes is every sample, in the order this package lists them.

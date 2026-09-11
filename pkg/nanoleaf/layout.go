@@ -92,26 +92,32 @@ func (p Panel) IsLight() bool {
 }
 
 // ShapeName names a shape identifier, or reports it as unknown.
+//
+// The name carries the product line wherever the shape alone would not say
+// enough. Four of these are triangles and three are squares, and they are not
+// interchangeable: a Light Panels triangle has an edge of 150 and a Shapes
+// one 134, so "triangle" on its own would name two panels that cannot be put
+// together. Every name here is unique, and a test keeps it that way.
 func ShapeName(t int) string {
 	switch t {
 	case ShapeLightPanel:
-		return "light panel"
+		return "light panels triangle"
 	case ShapeRhythm:
 		return "rhythm module"
 	case ShapeSquare:
-		return "square"
+		return "canvas square"
 	case ShapeSquareMaster:
-		return "square (controller)"
+		return "canvas square (controller)"
 	case ShapeSquarePassive:
-		return "square (passive)"
+		return "canvas square (passive)"
 	case ShapeHexagon:
-		return "hexagon"
+		return "shapes hexagon"
 	case ShapeTriangle:
-		return "triangle"
+		return "shapes triangle"
 	case ShapeMiniTriangle:
-		return "mini triangle"
+		return "shapes mini triangle"
 	case ShapeController:
-		return "controller"
+		return "shapes controller"
 	case ShapeElementsHexagon:
 		return "elements hexagon"
 	case ShapeElementsCorner:
@@ -129,11 +135,11 @@ func ShapeName(t int) string {
 	case ShapeLightstrip4D:
 		return "4d lightstrip"
 	case ShapeSkylight:
-		return "skylight panel"
+		return "skylight square"
 	case ShapeSkylightPrimary:
-		return "skylight panel (controller)"
+		return "skylight square (controller)"
 	case ShapeSkylightPassive:
-		return "skylight panel (passive)"
+		return "skylight square (passive)"
 	default:
 		return fmt.Sprintf("unknown (type %d)", t)
 	}

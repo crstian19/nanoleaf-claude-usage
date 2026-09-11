@@ -1,6 +1,9 @@
 package nanoleaf
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // theRange is every shape in Nanoleaf's own layout documentation, with the
 // product line it belongs to and whether it has LEDs.
@@ -94,5 +97,44 @@ func TestSkipShapesOverridesTheList(t *testing.T) {
 	}
 	if !(Panel{ShapeType: ShapeTriangle}).IsLight() {
 		t.Error("skipping one shape stopped another from lighting")
+	}
+}
+
+// TestEveryShapeHasItsOwnName is what the names are for. Four shapes in the
+// range are triangles and three are squares, and none of those pairs can be
+// put together: a Light Panels triangle has an edge of 150 and a Shapes one
+// 134. A name that fitted two of them would be a name that explains nothing
+// on a button, in a layout listing, or in the sentence that refuses a
+// placement.
+func TestEveryShapeHasItsOwnName(t *testing.T) {
+	seen := map[string]int{}
+	for _, shape := range theRange {
+		name := ShapeName(shape.shapeType)
+		if name == "" {
+			t.Errorf("shape %d has no name", shape.shapeType)
+			continue
+		}
+		if first, ok := seen[name]; ok {
+			t.Errorf("shapes %d and %d are both called %q", first, shape.shapeType, name)
+		}
+		seen[name] = shape.shapeType
+	}
+}
+
+// TestTheTrianglesSayWhichTriangleTheyAre covers the pair this came from: the
+// palette offered "Shapes triangle" and "Light Panel", and only one of those
+// says it is a triangle.
+func TestTheTrianglesSayWhichTriangleTheyAre(t *testing.T) {
+	for _, shapeType := range []int{ShapeLightPanel, ShapeTriangle, ShapeMiniTriangle} {
+		name := ShapeName(shapeType)
+		if !strings.Contains(name, "triangle") {
+			t.Errorf("shape %d is a triangle and is called %q", shapeType, name)
+		}
+	}
+	for _, shapeType := range []int{ShapeSquare, ShapeSkylight} {
+		name := ShapeName(shapeType)
+		if !strings.Contains(name, "square") {
+			t.Errorf("shape %d is a square and is called %q", shapeType, name)
+		}
 	}
 }
