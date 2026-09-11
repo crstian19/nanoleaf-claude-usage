@@ -104,6 +104,7 @@ session. There is nothing to enable and nothing to add to a startup file.
 | `nanoclaude calibrate` | Turn the shape to match your wall |
 | `nanoclaude layout` | Print the panel positions and the scene coordinates |
 | `nanoclaude preview` | Draw a scene without touching the panels |
+| `nanoclaude debug` | Put the panels in any state, for filming or for looking at |
 | `nanoclaude hooks` | Install, remove, or report the Claude Code hooks |
 | `nanoclaude brightness` | Report or set the panels' global brightness |
 
@@ -112,6 +113,19 @@ session. There is nothing to enable and nothing to add to a startup file.
 ```sh
 nanoclaude preview --budget 0.85 --phase tool --animate 8s
 ```
+
+`debug` does the same on the real panels, which is how the display gets
+filmed. A wall at 90 percent with an error on it is a few seconds of work
+here, and an afternoon of work otherwise.
+
+```sh
+nanoclaude debug --from 0 -b 1 --for 30s   # the wall filling, for a clip
+nanoclaude debug -b 0.9 -p error           # hold it, arrow keys to change
+```
+
+On a terminal it takes the arrow keys, so the wall can be driven while the
+camera runs. Stop the display first with `nanoclaude down`. A Claude Code hook
+in another window starts it again.
 
 Every live view has a plain form for a pipe or a log.
 

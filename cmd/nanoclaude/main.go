@@ -79,6 +79,7 @@ func newRootCmd() *cobra.Command {
 		newCalibrateCmd(),
 		newBrightnessCmd(),
 		newPreviewCmd(),
+		newDebugCmd(),
 		newHookCmd(),
 		newHooksCmd(),
 		newUpCmd(),
