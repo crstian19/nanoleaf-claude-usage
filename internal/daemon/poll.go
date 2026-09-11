@@ -241,3 +241,31 @@ func (d *Daemon) sweepSessions(ctx context.Context) {
 		}
 	}
 }
+
+// pollPause watches the file a pause is kept in.
+//
+// Polled rather than watched, because the file is written by another process
+// and a pause that took effect a few seconds late is a pause that works.
+func (d *Daemon) pollPause(ctx context.Context, out chan<- bool) {
+	tick := time.NewTicker(pauseInterval)
+	defer tick.Stop()
+
+	read := func() {
+		paused, _, err := Paused()
+		if err != nil {
+			d.log.Warn("pause read failed", "err", err)
+			return
+		}
+		send(out, paused)
+	}
+
+	read()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			read()
+		}
+	}
+}

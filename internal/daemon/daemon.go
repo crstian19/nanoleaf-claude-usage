@@ -100,6 +100,7 @@ type loop struct {
 	stream *nanoleaf.Streamer
 	saved  nanoleaf.State
 	armed  bool
+	paused bool
 
 	window     usage.Window
 	haveWindow bool
@@ -188,11 +189,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	readings := make(chan reading, 1)
 	toggles := make(chan bool, 1)
+	pauses := make(chan bool, 1)
 	activities := make(chan activity.Snapshot, 1)
 	snapshots := make(chan limits.Snapshot, 1)
 
 	go d.pollUsage(ctx, readings)
 	go d.pollToggle(ctx, toggles)
+	go d.pollPause(ctx, pauses)
 	go d.pollActivity(ctx, activities)
 	go d.pollLimits(ctx, snapshots)
 	go d.sweepSessions(ctx)
@@ -234,6 +237,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 			}
 		case on := <-toggles:
 			l.onToggle(on)
+		case paused := <-pauses:
+			l.onPause(paused)
 		case now := <-frames.C:
 			if l.idleTimedOut(now) {
 				d.log.Info("no Claude Code session for a while; shutting down",
@@ -288,26 +293,53 @@ func (l *loop) onLimits(s limits.Snapshot) {
 		"implied_ceiling_usd", math.Round(l.gauge.costCeiling*100)/100)
 }
 
-// onToggle arms or disarms the display, releasing the panels on the way down.
+// onToggle arms or disarms the display from the Home Assistant switch.
 func (l *loop) onToggle(on bool) {
 	if on == l.armed {
 		return
 	}
 	l.armed = on
-	if !l.armed {
-		l.release()
-		l.d.log.Info("disarmed; panels handed back")
+	l.settle(on, "switch")
+}
+
+// onPause takes the display out of service, or puts it back.
+//
+// Separate from the switch because they answer to different people: the
+// switch is the house, and a pause is whoever is sitting here. Either one can
+// keep the wall dark, and both have to agree for it to light.
+func (l *loop) onPause(paused bool) {
+	if paused == l.paused {
 		return
 	}
-	l.d.log.Info("armed")
+	l.paused = paused
+	l.settle(!paused, "pause")
 }
+
+// settle hands the panels back when the display has just stopped being
+// wanted, and names which of the two said so.
+func (l *loop) settle(wanted bool, by string) {
+	if l.displaying() {
+		l.d.log.Info("armed", "by", by)
+		return
+	}
+	if wanted {
+		// The other one is still holding it down, so there is nothing
+		// to hand back and nothing to announce.
+		return
+	}
+	l.release()
+	l.d.log.Info("disarmed; panels handed back", "by", by)
+}
+
+// displaying reports whether the wall should be showing anything.
+func (l *loop) displaying() bool { return l.armed && !l.paused }
 
 // onFrame renders and sends one frame.
 func (l *loop) onFrame(ctx context.Context, now time.Time) {
 	dt := now.Sub(l.lastFrame)
 	l.lastFrame = now
 
-	if !l.armed {
+	if !l.displaying() {
 		return
 	}
 	if l.stream == nil && !l.takeOver(ctx) {

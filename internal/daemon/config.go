@@ -89,6 +89,10 @@ const (
 	// toggleInterval is how often the Home Assistant switch is polled.
 	toggleInterval = 5 * time.Second
 
+	// pauseInterval is how often the pause file is read. A local stat is
+	// cheap, and a pause nobody notices for five seconds is no pause.
+	pauseInterval = 2 * time.Second
+
 	// activityInterval is how often hook state files are read. Fast enough
 	// that the pulse starts with the tool call, slow enough to keep
 	// filesystem I/O off the render loop.

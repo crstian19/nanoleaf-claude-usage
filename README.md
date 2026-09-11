@@ -92,11 +92,24 @@ Claude Code starts the display. `SessionStart` brings it up, and every other
 hook brings it back if it stopped. It shuts down after 20 minutes with no
 session. There is nothing to enable and nothing to add to a startup file.
 
+That is also why `down` is not an off switch. It stops the display until the
+next tool call brings it back. To keep the wall dark while you work:
+
+```sh
+nanoclaude pause --for 2h   # or until you resume
+nanoclaude resume
+```
+
+A pause is a file, so it outlives the process and holds even when a hook
+starts the display again. `nanoclaude status` says whether one is in force.
+
 | Command | What it does |
 |---|---|
 | `nanoclaude setup` | Set everything up, start to finish |
 | `nanoclaude up` | Start it in the background, if it does not run already |
 | `nanoclaude down` | Stop it and give the panels back |
+| `nanoclaude pause` | Keep the panels dark without stopping the display |
+| `nanoclaude resume` | Let it have the panels again |
 | `nanoclaude status` | Report whether it runs, and where the log is |
 | `nanoclaude run` | Run it in the foreground |
 | `nanoclaude discover` | Find Nanoleaf controllers on this network |
@@ -161,9 +174,13 @@ out of `ps`.
 
 ### Home Assistant
 
-The display can wait for a switch. Create an `input_boolean` helper and name it
-in `NANOCLAUDE_TOGGLE_ENTITY`. The daemon only reads it and never calls a
-service, so a fault here cannot change anything else in your house.
+Optional, and a second way to keep the wall dark. It is the one an automation
+can reach: at bedtime, when you leave the house, when a film starts.
+
+Create an `input_boolean` helper and name it in `NANOCLAUDE_TOGGLE_ENTITY`. The
+daemon only reads it and never calls a service, so a fault here cannot change
+anything else in your house. Both it and `pause` have to agree before the wall
+lights.
 
 Use an `https` address for `HASS_SERVER`. A long-lived token has full access
 and never expires, and the daemon sends it on every poll. Plain `http` is

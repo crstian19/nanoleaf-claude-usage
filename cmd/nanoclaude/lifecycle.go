@@ -80,6 +80,11 @@ func newStatusCmd() *cobra.Command {
 				return cfgErr
 			}
 
+			paused, pauseErr := pauseLine()
+			if pauseErr != nil {
+				return pauseErr
+			}
+
 			o := newOut(cmd.OutOrStdout())
 			switch {
 			case pid == 0:
@@ -88,6 +93,9 @@ func newStatusCmd() *cobra.Command {
 				o.print("running (pid unknown)\n")
 			default:
 				o.printf("running, pid %d\n", pid)
+			}
+			if paused != "" {
+				o.print(paused)
 			}
 			o.printf("config: %s\n", cfgPath)
 			o.printf("log:    %s\n", logPath)

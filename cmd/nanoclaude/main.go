@@ -84,6 +84,8 @@ func newRootCmd() *cobra.Command {
 		newHooksCmd(),
 		newUpCmd(),
 		newDownCmd(),
+		newPauseCmd(),
+		newResumeCmd(),
 		newStatusCmd(),
 	)
 	return root
