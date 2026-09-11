@@ -119,13 +119,16 @@ filmed. A wall at 90 percent with an error on it is a few seconds of work
 here, and an afternoon of work otherwise.
 
 ```sh
-nanoclaude debug --from 0 -b 1 --for 30s   # the wall filling, for a clip
-nanoclaude debug -b 0.9 -p error           # hold it, arrow keys to change
+nanoclaude debug --sweep 30s      # fill the wall over 30 seconds, then stay full
+nanoclaude debug -b 0.9 -p error  # hold one state
 ```
+
+It runs until you stop it. `--sweep` fills the wall over the time you give it
+and stays there, and `--for` stops the whole thing after a while.
 
 On a terminal it takes the arrow keys, so the wall can be driven while the
 camera runs. Stop the display first with `nanoclaude down`. A Claude Code hook
-in another window starts it again.
+in another window starts it again, and the two then fight over the panels.
 
 Every live view has a plain form for a pipe or a log.
 

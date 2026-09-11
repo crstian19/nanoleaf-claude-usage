@@ -43,7 +43,7 @@ func TestBuildVersionFallsBackToTheModule(t *testing.T) {
 // where it was asked to, end where it was asked to, and never leave the scale
 // in between.
 func TestTheSweepWalksFromOneLevelToTheOther(t *testing.T) {
-	state := debugState{from: 0.1, budget: 0.9, hold: 10 * time.Second}
+	state := debugState{from: 0.1, budget: 0.9, sweep: 10 * time.Second}
 
 	if got := state.levelAt(0); got != 0.1 {
 		t.Errorf("the sweep starts at %v, want 0.1", got)
@@ -54,14 +54,18 @@ func TestTheSweepWalksFromOneLevelToTheOther(t *testing.T) {
 	if got := state.levelAt(10 * time.Second); got != 0.9 {
 		t.Errorf("the sweep ends at %v, want 0.9", got)
 	}
-	// Past the end it holds, rather than running off the scale.
+	// And it stays there. A fill that ended by stopping showed the full
+	// wall for a single frame, which is no use to a camera.
 	if got := state.levelAt(time.Minute); got != 0.9 {
-		t.Errorf("a minute in, the sweep is at %v, want 0.9", got)
+		t.Errorf("a minute in, the wall is at %v, want it still full at 0.9", got)
+	}
+	if got := state.levelAt(time.Hour); got != 0.9 {
+		t.Errorf("an hour in, the wall is at %v", got)
 	}
 
 	// Without --from there is nothing to sweep, and the level is the one
 	// that was asked for.
-	held := debugState{from: noSweep, budget: 0.42, hold: 10 * time.Second}
+	held := debugState{from: noSweep, budget: 0.42, sweep: 10 * time.Second}
 	if got := held.levelAt(5 * time.Second); got != 0.42 {
 		t.Errorf("a held level moved to %v", got)
 	}
