@@ -2,3 +2,4 @@
 /coverage.out
 /coverage.txt
 /dist
+__pycache__/
