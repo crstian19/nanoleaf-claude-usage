@@ -9,8 +9,8 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/fang v1.0.0
 	github.com/spf13/cobra v1.10.2
-	github.com/tidwall/gjson v1.19.0
-	github.com/tidwall/sjson v1.2.5
+	github.com/tidwall/gjson v1.20.0
+	github.com/tidwall/sjson v1.2.7
 )
 
 require (
