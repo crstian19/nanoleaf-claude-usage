@@ -9,7 +9,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/fang v1.0.0
 	github.com/spf13/cobra v1.10.2
-	github.com/tidwall/gjson v1.20.0
+	github.com/tidwall/gjson v1.20.2
 	github.com/tidwall/sjson v1.2.7
 )
 
@@ -202,7 +202,7 @@ require (
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/tetafro/godot v1.5.6 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
-	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/pretty v1.3.0 // indirect
 	github.com/timakin/bodyclose v0.0.0-20260723120731-857993a2939c // indirect
 	github.com/timonwong/loggercheck v0.13.0 // indirect
 	github.com/tomarrell/wrapcheck/v2 v2.13.0 // indirect
