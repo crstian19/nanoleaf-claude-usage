@@ -1,6 +1,6 @@
 module github.com/crstian19/nanoleaf-claude-usage
 
-go 1.27.1
+go 1.27.3
 
 require (
 	charm.land/bubbles/v2 v2.2.1
