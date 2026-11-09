@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/fang v1.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/tidwall/gjson v1.20.2
-	github.com/tidwall/sjson v1.2.7
+	github.com/tidwall/sjson v1.2.8
 )
 
 require (
