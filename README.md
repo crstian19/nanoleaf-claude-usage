@@ -268,14 +268,17 @@ rendering.
 
 ### Releases
 
-Tags are the versions. Pushing one builds Linux and macOS binaries for both
-architectures and writes the release notes from the commit messages, which is
-what the Conventional Commits hook is for:
+[releaser-pleaser](https://github.com/apricote/releaser-pleaser) keeps a
+release PR open with the next version and `CHANGELOG.md`, computed from the
+Conventional Commits on `main`: `feat` bumps the minor, `fix` the patch, `!`
+the major. Merging that PR tags `vX.Y.Z` and creates the GitHub release, and
+the tag builds the Linux and macOS binaries for both architectures. Renovate
+commits dependency and Go toolchain updates as `fix(deps)`, so they ship in the
+next patch release; tooling and CI updates are `chore` and do not.
 
-```sh
-git tag -a v0.1.0 -m "v0.1.0"
-git push origin v0.1.0
-```
+The workflow authenticates as the `crstian19-releaser` GitHub App (secrets
+`RELEASER_APP_CLIENT_ID` and `RELEASER_APP_PRIVATE_KEY`): a tag pushed with
+`GITHUB_TOKEN` would not trigger the release.
 
 ## License
 
