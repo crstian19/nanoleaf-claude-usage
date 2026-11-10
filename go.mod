@@ -7,7 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.1.1
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.1.0
-	github.com/charmbracelet/fang v1.0.0
+	github.com/charmbracelet/fang/v2 v2.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/tidwall/gjson v1.20.2
 	github.com/tidwall/sjson v1.2.8
