@@ -9,8 +9,8 @@ require (
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/spf13/cobra v1.10.2
-	github.com/tidwall/gjson v1.20.4
-	github.com/tidwall/sjson v1.2.10
+	github.com/tidwall/gjson v1.20.5
+	github.com/tidwall/sjson v1.2.11
 )
 
 require (
