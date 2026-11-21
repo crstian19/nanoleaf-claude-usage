@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.2.3](https://github.com/crstian19/nanoleaf-claude-usage/releases/tag/v0.2.3)
+
+[Compare to previous version](https://github.com/crstian19/nanoleaf-claude-usage/compare/v0.2.2...v0.2.3)
+
+### Bug Fixes
+
+- **deps**: update module charm.land/lipgloss/v2 to v2.1.1 (#26) ([2e57184](https://github.com/crstian19/nanoleaf-claude-usage/commit/2e57184dbd56e9f66e03f626b63d8edf8099c450))
+- **deps**: update module github.com/tidwall/gjson to v1.20.4 (#28) ([074d589](https://github.com/crstian19/nanoleaf-claude-usage/commit/074d5897918cbdf4ca524bfb68be80c3721aa64d))
+- **deps**: update module github.com/tidwall/sjson to v1.2.10 (#30) ([4cb2149](https://github.com/crstian19/nanoleaf-claude-usage/commit/4cb214948d8dc7a46538bbcf2be529d147dd3c16))
+- **deps**: update module golang.org/x/vuln to v1.10.0 (#29) ([119671b](https://github.com/crstian19/nanoleaf-claude-usage/commit/119671b3a70e0f36c926891ba6e094e67b0929db))
+- **deps**: update module charm.land/bubbletea/v2 to v2.1.2 (#31) ([e7c7359](https://github.com/crstian19/nanoleaf-claude-usage/commit/e7c7359a8f71614fe42af38e03e5aef004164722))
+- **deps**: update module github.com/tidwall/sjson to v1.2.11 (#33) ([8db7f81](https://github.com/crstian19/nanoleaf-claude-usage/commit/8db7f81d6742fd1f0978f5b4107071bc8c9fd2cb))
+- **deps**: update module charm.land/bubbles/v2 to v2.2.2 (#34) ([d18c0fe](https://github.com/crstian19/nanoleaf-claude-usage/commit/d18c0febdf5f42de1062963fcf824af9fd13564c))
+
 ## [v0.2.2](https://github.com/crstian19/nanoleaf-claude-usage/releases/tag/v0.2.2)
 
 [Compare to previous version](https://github.com/crstian19/nanoleaf-claude-usage/compare/v0.2.1...v0.2.2)
