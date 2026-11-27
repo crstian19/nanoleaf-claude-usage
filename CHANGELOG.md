@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.2.4](https://github.com/crstian19/nanoleaf-claude-usage/releases/tag/v0.2.4)
+
+[Compare to previous version](https://github.com/crstian19/nanoleaf-claude-usage/compare/v0.2.3...v0.2.4)
+
+### Bug Fixes
+
+- **deps**: update module github.com/tidwall/gjson to v1.20.6 (#32) ([9babdd4](https://github.com/crstian19/nanoleaf-claude-usage/commit/9babdd436dc09212af9324f5dfd4793df3d316e2))
+- **deps**: update module github.com/tidwall/gjson to v1.20.7 (#37) ([ce2895f](https://github.com/crstian19/nanoleaf-claude-usage/commit/ce2895fc3a7eb3ccc6354ccac47888c5aafa9da5))
+- **deps**: update module charm.land/bubbletea/v2 to v2.1.3 (#36) ([d40d8df](https://github.com/crstian19/nanoleaf-claude-usage/commit/d40d8df41ac95d4e601422952c874d5afdf0ee87))
+- **deps**: update module charm.land/bubbletea/v2 to v2.2.0 (#38) ([4fb7686](https://github.com/crstian19/nanoleaf-claude-usage/commit/4fb76866e4e1a0c140474dc7924c976f36889eaa))
+
 ## [v0.2.3](https://github.com/crstian19/nanoleaf-claude-usage/releases/tag/v0.2.3)
 
 [Compare to previous version](https://github.com/crstian19/nanoleaf-claude-usage/compare/v0.2.2...v0.2.3)
